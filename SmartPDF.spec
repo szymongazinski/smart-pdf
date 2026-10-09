@@ -12,6 +12,12 @@ a = Analysis(['run.py'], pathex=[str(root)], binaries=[], datas=data,
              hiddenimports=['pymupdf'], hookspath=[], hooksconfig={}, runtime_hooks=[],
              excludes=['PySide6.QtWebEngineCore','PySide6.QtWebEngineWidgets','PySide6.QtPdf',
                        'PySide6.QtQuick','PySide6.QtQml','PySide6.QtNetwork','pytest'], noarchive=False)
+# Qt on Windows uses the operating system's unversioned ICU API. An unrelated
+# Poppler/Conda ICU on PATH may otherwise be collected with incompatible exports.
+# MuPDF statically links its text libraries and does not need these foreign DLLs.
+a.binaries = [entry for entry in a.binaries
+              if Path(entry[0]).name.lower() != 'icuuc.dll'
+              and not Path(entry[0]).name.lower().startswith('icudt')]
 pyz = PYZ(a.pure)
 exe = EXE(pyz,a.scripts,[],exclude_binaries=True,name='SmartPDF',debug=False,
           bootloader_ignore_signals=False,strip=False,upx=False,console=False,

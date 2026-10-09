@@ -15,7 +15,7 @@ def main():
             return 1
         return 0
     from PySide6.QtCore import QCoreApplication
-    from PySide6.QtGui import QIcon
+    from PySide6.QtGui import QColor,QIcon,QPalette
     from PySide6.QtWidgets import QApplication
     from smart_pdf.ocr import resources
     from smart_pdf.window import MainWindow
@@ -24,6 +24,15 @@ def main():
     QCoreApplication.setApplicationName("SmartPDFSmoke" if smoke else "Smart PDF")
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+    palette = QPalette()
+    for role,value in [(QPalette.Window,"#f6f8fc"),(QPalette.WindowText,"#25324a"),
+                       (QPalette.Base,"#ffffff"),(QPalette.AlternateBase,"#f3f6fc"),
+                       (QPalette.Text,"#25324a"),(QPalette.Button,"#ffffff"),
+                       (QPalette.ButtonText,"#25324a"),(QPalette.Highlight,"#2864ed"),
+                       (QPalette.HighlightedText,"#ffffff"),(QPalette.PlaceholderText,"#8290a5"),
+                       (QPalette.ToolTipBase,"#ffffff"),(QPalette.ToolTipText,"#25324a")]:
+        palette.setColor(role,QColor(value))
+    app.setPalette(palette)
     app.setWindowIcon(QIcon(str(resources() / "smart-pdf.ico")))
     window = MainWindow()
     window.show()
