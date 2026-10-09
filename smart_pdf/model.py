@@ -113,25 +113,42 @@ class Project:
         return source not in self.ocr and len(page.get_text().strip()) < 20 and bool(page.get_images() or page.get_drawings())
 
     def add_margin(self, indices, side, points, add_text=True):
+        """Set one margin per side. Repeated additions reuse its notes object."""
         if side not in {"left", "right", "top", "bottom"} or not 10 <= points <= 1440:
             raise ValueError("Nieprawidłowy margines.")
         for index in indices:
             page = self.pages[index]
-            old_w, old_h = page.size
-            dx, dy = (points if side == "left" else 0), (points if side == "top" else 0)
+            delta = points-page.margins[side]
+            dx, dy = (delta if side == "left" else 0), (delta if side == "top" else 0)
             for obj in page.objects:
                 obj["x"] += dx
                 obj["y"] += dy
                 # Replacement masks stay fixed in page coordinates; geometry is local.
                 for key in ("redactions",):
                     obj[key] = [[r[0]+dx, r[1]+dy, r[2]+dx, r[3]+dy] for r in obj.get(key, [])]
-            page.margins[side] += points
+            page.margins[side] = points
             if add_text:
-                if side in {"left", "right"}:
-                    x, y, w, h = (8 if side == "left" else old_w+8), 12, points-16, old_h-24
+                notes = next((o for o in page.objects if o.get("margin_side")==side),None)
+                if notes is None:
+                    notes = make_object("text",html=text_html("",12),margin_side=side,
+                                        rotation=-page.rotation,margin_layout_rotation=-page.rotation)
+                    page.objects.append(notes)
+            # Keep notes inside their own margin when either margin changes.
+            for notes in page.objects:
+                edge = notes.get("margin_side")
+                if edge not in page.margins or not page.margins[edge]:
+                    continue
+                mw,mh = page.size
+                if edge in {"left","right"}:
+                    x = 8 if edge=="left" else mw-page.margins[edge]+8
+                    x,y,w,h = x,12,page.margins[edge]-16,mh-24
                 else:
-                    x, y, w, h = 12, (8 if side == "top" else old_h+8), old_w-24, points-16
-                page.objects.append(make_object("text", x, y, max(12,w), max(12,h), html=text_html("Notatki", 12)))
+                    y = 8 if edge=="top" else mh-page.margins[edge]+8
+                    x,y,w,h = 12,y,mw-24,page.margins[edge]-16
+                w,h = max(12,w),max(12,h)
+                if notes.get("margin_layout_rotation",0)%180:
+                    x,y,w,h = x+w/2-h/2,y+h/2-w/2,h,w
+                notes.update(x=x,y=y,w=w,h=h)
         self.dirty = True
 
     def save(self, path: str | Path, autosave=False):

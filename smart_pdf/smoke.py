@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pymupdf
 from PySide6.QtCore import QTimer
+from PySide6.QtTest import QTest
 
 from smart_pdf.export import export_pdf
 from smart_pdf.model import Project,make_object,text_html
@@ -36,6 +37,7 @@ def run_smoke(app,window,directory):
                 assert result[0].rotation==90
                 result[0].get_pixmap().save(directory/"smoke-export.png")
             window.canvas.fit_page()
+            QTest.qWait(250)
             window.grab().save(str(directory/"smoke-window.png"))
             (directory/"result.json").write_text(json.dumps({"ok":True,"pages":len(project.pages),"fonts":"Polish Unicode verified","rotation":90}),encoding="utf-8")
             window.undo.setClean()

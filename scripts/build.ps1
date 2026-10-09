@@ -15,4 +15,6 @@ if (-not $SkipInstaller) {
     if (-not $compiler) { throw 'Zainstaluj Inno Setup 6: winget install JRSoftware.InnoSetup' }
     & $compiler 'installer/SmartPDF.iss'
     if ($LASTEXITCODE -ne 0) { throw 'Nie udało się zbudować instalatora.' }
+    & $compiler '/DUpdateOnly' 'installer/SmartPDF.iss'
+    if ($LASTEXITCODE -ne 0) { throw 'Nie udało się zbudować aktualizatora.' }
 }

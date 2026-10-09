@@ -58,6 +58,7 @@ def test_object_clipboard_cut_paste_and_undo(app):
     obj = make_object("ellipse",40,50,100,70)
     window.mutate("Add",lambda:window.project.pages[0].objects.append(obj))
     canvas = window.canvas
+    canvas.set_tool("select")
     canvas.select_ids([obj["id"]])
     canvas.setFocus()
     QTest.keyClick(canvas,Qt.Key_C,Qt.ControlModifier)
@@ -79,10 +80,11 @@ def test_direct_move_resize_rotate_and_properties(app):
     obj = make_object("text",80,120,180,80,html=text_html("Editable",16))
     window.mutate("Add",lambda:window.project.pages[0].objects.append(obj))
     canvas = window.canvas
+    canvas.set_tool("select")
     canvas.select_ids([obj["id"]])
-    QTest.mousePress(canvas.viewport(),Qt.LeftButton,Qt.NoModifier,view_point(canvas,130,150))
-    QTest.mouseMove(canvas.viewport(),view_point(canvas,160,180),25)
-    QTest.mouseRelease(canvas.viewport(),Qt.LeftButton,Qt.NoModifier,view_point(canvas,160,180))
+    QTest.mousePress(canvas.viewport(),Qt.LeftButton,Qt.NoModifier,view_point(canvas,130,120))
+    QTest.mouseMove(canvas.viewport(),view_point(canvas,160,150),25)
+    QTest.mouseRelease(canvas.viewport(),Qt.LeftButton,Qt.NoModifier,view_point(canvas,160,150))
     app.processEvents()
     moved = window.project.pages[0].objects[0]
     assert moved["x"]>100 and moved["y"]>140
@@ -123,7 +125,7 @@ def test_search_field_does_not_trigger_tool_shortcuts(app):
     window.search.setFocus()
     QTest.keyClicks(window.search,"plain text")
     assert window.search.text()=="plain text"
-    assert window.canvas.tool=="select"
+    assert window.canvas.tool=="select_text"
     finish(window,app)
 
 

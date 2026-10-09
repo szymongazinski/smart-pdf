@@ -51,7 +51,7 @@ def test_export_preserves_native_text_and_unicode_rich_text(tmp_path,app):
         spans = [s for b in page.get_text("dict")["blocks"] if "lines" in b for l in b["lines"] for s in l["spans"]]
         added = next(s for s in spans if "Zażółć" in s["text"])
         assert abs(added["size"]-18)<.1
-        assert "Notatki" in text
+        assert "Kliknij, aby" not in text  # Empty notes show a UI-only placeholder.
         assert page.rotation == 90
         assert page.rect.width == 500
         assert page.rect.height == 520

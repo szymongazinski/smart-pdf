@@ -1,7 +1,11 @@
-#define AppVersion "0.1.0"
+#define AppVersion "0.2.0"
 
 [Setup]
+#ifdef TestMode
+AppId={{69C23A51-2744-48E0-9966-02F3CE16E601}
+#else
 AppId={{9E81C3D8-0F3D-4D2E-A612-60AEB63C8C0C}
+#endif
 AppName=Smart PDF
 AppVersion={#AppVersion}
 AppPublisher=Smart PDF contributors
@@ -14,14 +18,23 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 ChangesAssociations=yes
 OutputDir=..\dist\installer
+#ifdef UpdateOnly
+OutputBaseFilename=SmartPDF-Update-{#AppVersion}-x64
+DisableWelcomePage=yes
+DisableDirPage=yes
+DisableReadyPage=yes
+#else
 OutputBaseFilename=SmartPDF-Setup-{#AppVersion}-x64
+LicenseFile=..\LICENSE
+#endif
 SetupIconFile=..\assets\smart-pdf.ico
 UninstallDisplayIcon={app}\SmartPDF.exe
-LicenseFile=..\LICENSE
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 CloseApplications=yes
+UsePreviousAppDir=yes
+UsePreviousTasks=yes
 UninstallDisplayName=Smart PDF
 VersionInfoDescription=Smart PDF Installer
 
@@ -38,8 +51,13 @@ Name: "projectassociation"; Description: "Otwieraj projekty .smartpdf w Smart PD
 Source: "..\dist\SmartPDF\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
+#ifdef TestMode
+Name: "{autoprograms}\Smart PDF Update Test"; Filename: "{app}\SmartPDF.exe"
+Name: "{autodesktop}\Smart PDF Update Test"; Filename: "{app}\SmartPDF.exe"; Tasks: desktopicon
+#else
 Name: "{autoprograms}\Smart PDF"; Filename: "{app}\SmartPDF.exe"
 Name: "{autodesktop}\Smart PDF"; Filename: "{app}\SmartPDF.exe"; Tasks: desktopicon
+#endif
 
 [Registry]
 Root: HKCU; Subkey: "Software\Classes\Applications\SmartPDF.exe"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "Smart PDF"; Flags: uninsdeletekey; Tasks: pdfopenwith
@@ -61,3 +79,31 @@ Root: HKCU; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueN
 
 [Run]
 Filename: "{app}\SmartPDF.exe"; Description: "Uruchom Smart PDF"; Flags: nowait postinstall skipifsilent
+
+#ifdef UpdateOnly
+[Code]
+function InitializeSetup(): Boolean;
+var
+  ExistingDir: String;
+begin
+#ifdef TestMode
+  Result := RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{69C23A51-2744-48E0-9966-02F3CE16E601}_is1', 'InstallLocation', ExistingDir);
+#else
+  Result := RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{9E81C3D8-0F3D-4D2E-A612-60AEB63C8C0C}_is1', 'InstallLocation', ExistingDir);
+  if not Result then
+  begin
+    ExistingDir := ExpandConstant('{localappdata}\Programs\Smart PDF');
+    Result := FileExists(AddBackslash(ExistingDir) + 'unins000.dat') and
+      FileExists(AddBackslash(ExistingDir) + '_internal\python314.dll');
+  end;
+#endif
+  Result := Result and FileExists(AddBackslash(ExistingDir) + 'SmartPDF.exe');
+  if not Result then
+    MsgBox('Nie znaleziono zainstalowanego Smart PDF. Pobierz pełny instalator z GitHub.', mbInformation, MB_OK);
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := (PageID = wpSelectTasks);
+end;
+#endif

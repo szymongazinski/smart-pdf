@@ -8,6 +8,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from PySide6.QtCore import QCoreApplication,QEvent,QTimer
 from PySide6.QtGui import QFontDatabase
 from PySide6.QtWidgets import QApplication
+from PySide6.QtTest import QTest
 import pymupdf
 from smart_pdf.export import export_pdf,overlay_pdf
 from smart_pdf.model import Project,make_object,text_html
@@ -17,6 +18,7 @@ root = Path(__file__).resolve().parents[1]
 output = root/"output"
 output.mkdir(exist_ok=True)
 app = QApplication([])
+app.setStyle("Fusion")
 app.setOrganizationName("SmartPDF-QA")
 app.setApplicationName("SmartPDF-QA")
 if os.name=="nt":
@@ -31,6 +33,13 @@ page.objects.append(make_object("text",42,230,495,190,html=text_html("Zaznacz te
 base_pdf = overlay_pdf(page)
 (output/"SmartPDF-demo-source.pdf").write_bytes(base_pdf)
 project = Project.from_pdf(output/"SmartPDF-demo-source.pdf")
+with pymupdf.open(stream=project.source_pdf,filetype="pdf") as doc:
+    original = doc.tobytes()
+    for i in range(2):
+        with pymupdf.open(stream=original,filetype="pdf") as one:
+            doc.insert_pdf(one)
+    from smart_pdf.model import PageState
+    project = Project(doc.tobytes(),[PageState(i,p.rect.width,p.rect.height) for i,p in enumerate(doc)])
 project.title = "Smart PDF — przykład"
 project.add_margin([0],"right",150)
 notes = project.pages[0].objects[0]
@@ -51,14 +60,22 @@ window.resize(1500,980)
 window.show()
 window.ocr_action.setChecked(False)
 window.attach_project(project)
-for i in range(3):
-    app.processEvents()
+QTest.qWait(450)
 window.canvas.select_ids([project.pages[0].objects[-1]["id"]])
 window.grab().save(str(output/"SmartPDF-editor.png"))
+window.canvas.start_text_edit(notes["id"])
+QTest.qWait(150)
+window.grab().save(str(output/"SmartPDF-inline.png"))
+window.canvas.finish_text_edit()
+window.canvas.set_zoom(250)
+window.canvas.centerOn(window.canvas.root.mapToScene(260,275))
+QTest.qWait(400)
+window.grab().save(str(output/"SmartPDF-zoom.png"))
 window.read_action.setChecked(True)
 window.toggle_reading(True)
 app.processEvents()
 window.canvas.fit_page()
+QTest.qWait(300)
 window.grab().save(str(output/"SmartPDF-reading.png"))
 window.undo.clear()
 window.close()

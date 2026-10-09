@@ -8,17 +8,18 @@ from pathlib import Path
 
 import pymupdf
 from PySide6.QtCore import QItemSelectionModel, QProcess, QSettings, QSize, QStandardPaths, QTemporaryDir, QTimer, Qt
-from PySide6.QtGui import QAction, QActionGroup, QColor, QIcon, QImage, QPixmap, QTransform, QUndoCommand, QUndoStack
+from PySide6.QtGui import QAction, QActionGroup, QColor, QFont, QIcon, QImage, QPixmap, QTextCharFormat, QTextCursor, QTransform, QUndoCommand, QUndoStack
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QColorDialog, QComboBox, QDialog, QDialogButtonBox,
     QDockWidget, QDoubleSpinBox, QFileDialog, QFormLayout, QHBoxLayout, QInputDialog,
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QPushButton,
-    QSpinBox, QStackedWidget, QToolBar, QVBoxLayout, QWidget,
+    QSpinBox, QStackedWidget, QToolBar, QToolButton, QVBoxLayout, QWidget, QMenu, QFontComboBox, QAbstractSpinBox,
 )
 
 from smart_pdf import __version__
 from smart_pdf.canvas import Canvas
-from smart_pdf.dialogs import ScopeDialog, TextDialog
+from smart_pdf.dialogs import ScopeDialog
+from smart_pdf.controls import DockTitle, PageDelegate, ValueSlider
 from smart_pdf.export import export_pdf
 from smart_pdf.model import Project, make_object, text_html, uid
 from smart_pdf.ocr import available_languages, resources
@@ -29,12 +30,18 @@ class EditCommand(QUndoCommand):
     def __init__(self,window,before,after,label):
         super().__init__(label)
         self.window,self.before,self.after = window,before,after
+        self.initial = True
 
     def undo(self):
         self.window.restore_pages(self.before)
 
     def redo(self):
-        self.window.restore_pages(self.after)
+        if self.initial:
+            self.initial = False
+            self.window.revision += 1
+            self.window.refresh_document()
+        else:
+            self.window.restore_pages(self.after)
 
 
 class MainWindow(QMainWindow):
@@ -49,6 +56,8 @@ class MainWindow(QMainWindow):
         self.reading = False
         self.recovered = False
         self.refreshing = False
+        self.live_before = None
+        self.margin_side = "right"
         self.revision = 0
         self.autosaved_revision = -1
         self.recovery_id = uid()
@@ -58,13 +67,15 @@ class MainWindow(QMainWindow):
         self.undo.cleanChanged.connect(self.update_title)
         self.undo.indexChanged.connect(self.update_title)
         self.canvas = Canvas()
-        self.canvas.committed.connect(self.commit,Qt.QueuedConnection)
+        self.canvas.committed.connect(self.commit)
         self.canvas.text_add_requested.connect(self.add_text)
         self.canvas.edit_text_requested.connect(self.edit_text)
-        self.canvas.replacement_requested.connect(self.replace_text)
         self.canvas.selection_changed.connect(self.sync_properties)
         self.canvas.file_dropped.connect(self.open_path)
         self.canvas.zoom_changed.connect(self.zoom_label)
+        self.canvas.page_changed.connect(self.scrolled_page)
+        self.canvas.text_editing_changed.connect(self.text_editing_changed)
+        self.canvas.text_format_changed.connect(self.sync_text_format)
         self.stack = QStackedWidget()
         self.stack.addWidget(self.welcome())
         self.stack.addWidget(self.canvas)
@@ -89,7 +100,10 @@ class MainWindow(QMainWindow):
         self.thumbnail_timer.timeout.connect(self.render_next_thumbnail)
         self.thumbnail_queue = []
         self.thumb_cache = {}
-        self.ocr_status = QLabel("OCR lokalny")
+        self.ocr_status = QLabel("OCR wyłączony • uruchom przyciskiem OCR")
+        self.ocr_status.setMaximumWidth(285)
+        self.ocr_status.setToolTip("OCR działa lokalnie i rozpoczyna się dopiero na Twoje polecenie.")
+        self.statusBar().setSizeGripEnabled(False)
         self.statusBar().addPermanentWidget(self.ocr_status)
         self.statusBar().showMessage("Otwórz PDF lub utwórz pusty dokument. Wszystkie operacje odbywają się lokalnie.")
         self.pages_dock.hide()
@@ -130,17 +144,17 @@ class MainWindow(QMainWindow):
         self.prev_page_action = self.action("Poprzednia strona",lambda:self.navigate_page(-1),"Ctrl+PgUp")
         self.next_page_action = self.action("Następna strona",lambda:self.navigate_page(1),"Ctrl+PgDown")
         self.rotate_action = self.action("Obróć strony…",self.rotate_pages)
-        self.margin_action = self.action("Dodaj margines…",self.add_margin)
+        self.margin_action = self.action("Margines",lambda:self.add_margin("right"))
         self.ocr_action = self.action("OCR automatyczny",self.toggle_ocr,checkable=True)
-        self.ocr_action.setChecked(self.settings.value("auto_ocr",True,type=bool))
-        self.ocr_now_action = self.action("Rozpoznaj skany teraz",lambda:self.start_ocr(True))
+        self.ocr_action.setChecked(False)
+        self.ocr_now_action = self.action("OCR",lambda:self.start_ocr(True))
         self.ocr_repeat_action = self.action("Rozpoznaj ponownie wybrane skany",lambda:self.start_ocr(True,True))
         self.ocr_cancel_action = self.action("Anuluj OCR",self.cancel_ocr)
         self.settings_action = self.action("Ustawienia OCR…",self.ocr_settings)
         self.search_action = self.action("Szukaj tekstu",self.focus_search,"Ctrl+F")
         self.tool_group = QActionGroup(self)
         self.tool_actions = {}
-        for kind,label,key in [("select","Obiekty","V"),("select_text","Zaznacz tekst","S"),
+        for kind,label,key in [("select_text","Zaznacz tekst","S"),("select","Obiekty","V"),
                                ("hand","Przesuwaj","G"),("pen","Pióro","P"),("text","Tekst","T"),
                                ("highlight","Zakreślacz","H"),("underline","Podkreślenie","U"),
                                ("strike","Przekreślenie",None),("line","Linia","L"),
@@ -148,11 +162,11 @@ class MainWindow(QMainWindow):
             action = self.action(label,lambda checked,k=kind:self.select_tool(k),key,True,True)
             self.tool_group.addAction(action)
             self.tool_actions[kind] = action
-        self.tool_actions["select"].setChecked(True)
+        self.tool_actions["select_text"].setChecked(True)
 
     def build_toolbars(self):
         self.header = QToolBar("Dokument",self)
-        self.header.setMovable(True)
+        self.header.setMovable(False)
         self.header.setObjectName("document-toolbar")
         self.addToolBar(self.header)
         brand = QLabel("  SMART PDF  ")
@@ -165,14 +179,24 @@ class MainWindow(QMainWindow):
         self.header.addAction(self.redo_action)
         self.header.addSeparator()
         self.header.addAction(self.rotate_action)
-        self.header.addAction(self.margin_action)
+        margin = QToolButton()
+        margin.setDefaultAction(self.margin_action)
+        margin.setPopupMode(QToolButton.MenuButtonPopup)
+        menu = QMenu(margin)
+        menu.addAction("Dodaj lewy margines",lambda:self.add_margin("left"))
+        menu.addSeparator()
+        menu.addAction("Prawy margines na zaznaczonych stronach",lambda:self.add_margin("right",self.selected_pages()))
+        menu.addAction("Prawy margines na wszystkich stronach",lambda:self.add_margin("right",list(range(len(self.project.pages)))) if self.project else None)
+        margin.setMenu(menu)
+        margin.setToolTip("Kliknij: prawy margines z polem tekstowym. Strzałka: lewy margines i zakres.")
+        self.header.addWidget(margin)
         self.header.addSeparator()
         self.header.addAction(self.read_action)
-        self.header.addAction(self.ocr_action)
+        self.header.addAction(self.ocr_now_action)
         self.addToolBarBreak()
         self.tools = QToolBar("Narzędzia edycji",self)
         self.tools.setObjectName("editing-toolbar")
-        self.tools.setMovable(True)
+        self.tools.setMovable(False)
         self.addToolBar(self.tools)
         for action in self.tool_actions.values():
             self.tools.addAction(action)
@@ -182,16 +206,16 @@ class MainWindow(QMainWindow):
         self.tools.addWidget(self.color_button)
         self.update_color_button(self.canvas.color)
         self.tools.addWidget(QLabel(" Grubość "))
-        self.stroke = QDoubleSpinBox()
-        self.stroke.setRange(.3,30)
-        self.stroke.setValue(2.5)
-        self.stroke.setSingleStep(.5)
-        self.stroke.setMaximumWidth(75)
-        self.stroke.valueChanged.connect(lambda n:setattr(self.canvas,"stroke_width",n))
+        self.stroke = ValueSlider(.3,30,2.5," pt")
+        self.stroke.setFixedWidth(200)
+        self.stroke.valueChanged.connect(self.stroke_changed)
+        self.stroke.editingStarted.connect(self.begin_live_change)
+        self.stroke.editingFinished.connect(self.end_live_change)
         self.tools.addWidget(self.stroke)
         self.zoom = QComboBox()
         self.zoom.addItems(["50%","75%","100%","125%","150%","200%","300%"])
         self.zoom.setCurrentText("100%")
+        self.zoom.setToolTip("Podgląd jest renderowany do aktualnego powiększenia. Eksport zachowuje jakość oryginalnego PDF.")
         self.zoom.currentTextChanged.connect(lambda t:self.canvas.set_zoom(int(t.rstrip("%"))) if not self.refreshing else None)
         self.statusBar().addPermanentWidget(self.zoom)
         fit = QPushButton("Dopasuj")
@@ -205,9 +229,13 @@ class MainWindow(QMainWindow):
         self.page_number = QSpinBox()
         self.page_number.setMinimum(1)
         self.page_number.setMaximum(1)
-        self.page_number.setPrefix("Strona ")
+        self.page_number.setButtonSymbols(QAbstractSpinBox.UpDownArrows)
+        self.page_number.setAlignment(Qt.AlignCenter)
+        self.page_number.setFixedWidth(42)
         self.page_number.valueChanged.connect(lambda n:self.page_list.setCurrentRow(n-1) if self.project and not self.refreshing else None)
         self.statusBar().addPermanentWidget(self.page_number)
+        self.page_total = QLabel("/ 1")
+        self.statusBar().addPermanentWidget(self.page_total)
         self.next_button = QPushButton("›")
         self.next_button.setToolTip("Następna strona • Ctrl+PageDown")
         self.next_button.setMaximumWidth(32)
@@ -238,7 +266,7 @@ class MainWindow(QMainWindow):
         row.addWidget(new_button)
         layout.addLayout(row)
         layout.addSpacing(20)
-        hint = QLabel("Rysuj • zaznaczaj • zmieniaj tekst • dodawaj marginesy\n\n.smartpdf zachowuje obiekty     /     PDF do udostępnienia")
+        hint = QLabel("Rysuj • zaznaczaj • pisz na dokumencie • dodawaj marginesy\n\n.smartpdf zachowuje obiekty     /     PDF do udostępnienia")
         hint.setAlignment(Qt.AlignCenter)
         hint.setStyleSheet("color:#78869b;line-height:150%;")
         layout.addWidget(hint)
@@ -252,6 +280,7 @@ class MainWindow(QMainWindow):
         self.pages_dock.setObjectName("pages-dock")
         self.pages_dock.setMinimumWidth(195)
         self.pages_dock.setMaximumWidth(360)
+        self.pages_dock.setTitleBarWidget(DockTitle(self.pages_dock,"Strony"))
         panel = QWidget()
         layout = QVBoxLayout(panel)
         search_row = QHBoxLayout()
@@ -265,7 +294,10 @@ class MainWindow(QMainWindow):
         search_row.addWidget(next_button)
         layout.addLayout(search_row)
         self.page_list = QListWidget()
+        self.page_list.setItemDelegate(PageDelegate(self.page_list))
         self.page_list.setIconSize(QSize(125,150))
+        self.page_list.setMouseTracking(True)
+        self.page_list.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.page_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.page_list.setDragDropMode(QAbstractItemView.InternalMove)
         self.page_list.currentRowChanged.connect(self.change_page)
@@ -284,9 +316,10 @@ class MainWindow(QMainWindow):
         self.properties_dock.setObjectName("properties-dock")
         self.properties_dock.setMinimumWidth(235)
         self.properties_dock.setMaximumWidth(350)
+        self.properties_dock.setTitleBarWidget(DockTitle(self.properties_dock,"Tekst i obiekty"))
         panel = QWidget()
         layout = QVBoxLayout(panel)
-        self.property_hint = QLabel("Wybierz obiekt narzędziem Obiekty.\nDwuklik na tekście otwiera edytor.")
+        self.property_hint = QLabel("Kliknij pole tekstowe i pisz na stronie.\nPrzesuwaj je za ramkę; uchwyty zmieniają rozmiar i obrót.")
         self.property_hint.setWordWrap(True)
         layout.addWidget(self.property_hint)
         self.swatches = QHBoxLayout()
@@ -298,12 +331,53 @@ class MainWindow(QMainWindow):
             button.clicked.connect(lambda checked,c=color:self.set_color(c))
             self.swatches.addWidget(button)
         layout.addLayout(self.swatches)
+        self.text_controls = QWidget()
+        text_form = QFormLayout(self.text_controls)
+        text_form.setContentsMargins(0,8,0,8)
+        self.fonts = QFontComboBox()
+        self.fonts.setCurrentFont(QFont("Arial"))
+        self.fonts.currentFontChanged.connect(lambda f:self.format_text(font=f.family()))
+        text_form.addRow("Czcionka",self.fonts)
+        self.font_size = QSpinBox()
+        self.font_size.setRange(6,144)
+        self.font_size.setValue(14)
+        self.font_size.setSuffix(" pt")
+        self.font_size.setButtonSymbols(QAbstractSpinBox.UpDownArrows)
+        self.font_size.valueChanged.connect(lambda n:self.format_text(size=n))
+        text_form.addRow("Rozmiar",self.font_size)
+        row = QHBoxLayout()
+        self.text_buttons = {}
+        for key,label in [("bold","B"),("italic","I"),("underline","U")]:
+            button = QPushButton(label)
+            button.setCheckable(True)
+            button.setFixedWidth(38)
+            button.setToolTip({"bold":"Pogrubienie • Ctrl+B","italic":"Kursywa • Ctrl+I","underline":"Podkreślenie • Ctrl+U"}[key])
+            button.setFocusPolicy(Qt.NoFocus)
+            button.clicked.connect(lambda checked,k=key:self.format_text(**{k:checked}))
+            row.addWidget(button)
+            self.text_buttons[key] = button
+        self.text_align = QComboBox()
+        self.text_align.addItems(["Do lewej","Środek","Do prawej"])
+        self.text_align.currentIndexChanged.connect(lambda n:self.format_text(align=n))
+        row.addWidget(self.text_align)
+        text_form.addRow(row)
+        layout.addWidget(self.text_controls)
+        layout.addWidget(QLabel("Margines na bieżącej stronie"))
+        self.margin_control = ValueSlider(15,160,55," mm")
+        self.margin_control.valueChanged.connect(self.margin_width_changed)
+        self.margin_control.editingStarted.connect(self.begin_live_change)
+        self.margin_control.editingFinished.connect(self.end_live_change)
+        layout.addWidget(self.margin_control)
+        self.margin_hint = QLabel("Prawy • kliknij Margines, aby dodać")
+        self.margin_hint.setStyleSheet("font-size:9pt;color:#74839a;")
+        layout.addWidget(self.margin_hint)
         self.properties_form = QWidget()
         form = QFormLayout(self.properties_form)
         self.property_spins = {}
-        for key,label in [("x","Pozycja X"),("y","Pozycja Y"),("w","Szerokość"),("h","Wysokość"),("rotation","Obrót"),("width","Grubość"),("opacity","Krycie")]:
+        for key,label in [("x","Pozycja X"),("y","Pozycja Y"),("w","Szerokość"),("h","Wysokość"),("rotation","Obrót"),("opacity","Krycie")]:
             spin = QDoubleSpinBox()
             spin.setDecimals(1 if key != "opacity" else 2)
+            spin.setButtonSymbols(QAbstractSpinBox.UpDownArrows)
             spin.setRange(-20000,20000)
             if key in {"w","h"}:
                 spin.setRange(1,20000)
@@ -322,7 +396,7 @@ class MainWindow(QMainWindow):
         clear_fill = QPushButton("Usuń wypełnienie")
         clear_fill.clicked.connect(lambda:self.set_property("fill",""))
         form.addRow(clear_fill)
-        self.edit_text_button = QPushButton("Edytuj tekst i formatowanie…")
+        self.edit_text_button = QPushButton("Pisz w wybranym polu")
         self.edit_text_button.clicked.connect(lambda:self.edit_text(self.canvas.selected_objects()[0]["id"]) if self.canvas.selected_objects() else None)
         form.addRow(self.edit_text_button)
         layout.addWidget(self.properties_form)
@@ -343,11 +417,10 @@ class MainWindow(QMainWindow):
         edit = self.menuBar().addMenu("Edycja")
         for action in (self.undo_action,self.redo_action,self.copy_action,self.cut_action,self.paste_action,self.delete_action,self.duplicate_action):
             edit.addAction(action)
-        edit.addSeparator()
-        edit.addAction("Zmień zaznaczony tekst…",lambda:self.replace_text(self.canvas.selected_words))
         pages = self.menuBar().addMenu("Strony")
         pages.addAction(self.rotate_action)
         pages.addAction(self.margin_action)
+        pages.addAction("Dodaj lewy margines",lambda:self.add_margin("left"))
         pages.addAction("Usuń wybrane strony…",self.delete_pages)
         view = self.menuBar().addMenu("Widok")
         for action in (self.read_action,self.fullscreen_action,self.fit_action,self.search_action):
@@ -361,8 +434,17 @@ class MainWindow(QMainWindow):
         for action in (self.ocr_action,self.ocr_now_action,self.ocr_repeat_action,self.ocr_cancel_action,self.settings_action):
             ocr.addAction(action)
         help_menu = self.menuBar().addMenu("Pomoc")
+        self.update_action = self.action("Sprawdź aktualizacje…",self.check_updates)
+        self.header.addSeparator()
+        self.header.addAction(self.update_action)
+        help_menu.addAction(self.update_action)
         help_menu.addAction("Skróty i zapis",self.help)
         help_menu.addAction("O programie",lambda:QMessageBox.about(self,"Smart PDF",f"Smart PDF {__version__}\nLokalny edytor PDF. Licencja AGPL-3.0-or-later.\nPySide6 / Qt, PyMuPDF / MuPDF, Tesseract."))
+
+    def check_updates(self):
+        from smart_pdf.updates import UpdateDialog
+        dialog = UpdateDialog(self)
+        dialog.exec()
 
     def selected_pages(self):
         return sorted(self.page_list.row(item) for item in self.page_list.selectedItems()) or [self.index]
@@ -370,6 +452,7 @@ class MainWindow(QMainWindow):
     def mutate(self,label,callback):
         if not self.project or self.reading:
             return
+        self.canvas.finish_text_edit()
         before = self.project.snapshot()
         active_id = self.project.pages[self.index].id
         callback()
@@ -415,7 +498,7 @@ class MainWindow(QMainWindow):
         self.page_label.setText(f"{self.index+1} / {len(self.project.pages)}   •   Ctrl + klik: wiele stron")
         self.page_number.blockSignals(True)
         self.page_number.setMaximum(len(self.project.pages))
-        self.page_number.setSuffix(f" / {len(self.project.pages)}")
+        self.page_total.setText(f"/ {len(self.project.pages)}")
         self.page_number.setValue(self.index+1)
         self.page_number.blockSignals(False)
         self.refreshing = False
@@ -444,12 +527,27 @@ class MainWindow(QMainWindow):
         if self.refreshing or not self.project or not 0 <= index < len(self.project.pages):
             return
         self.index = index
-        self.canvas.show_page(self.project,index)
+        self.canvas.scroll_to_page(index)
         self.page_label.setText(f"{index+1} / {len(self.project.pages)}   •   Ctrl + klik: wiele stron")
         self.page_number.blockSignals(True)
         self.page_number.setValue(index+1)
         self.page_number.blockSignals(False)
         self.canvas.setFocus()
+        self.sync_margin()
+
+    def scrolled_page(self,index):
+        if self.refreshing or not self.project:
+            return
+        self.index = index
+        self.page_list.blockSignals(True)
+        self.page_list.setCurrentRow(index,QItemSelectionModel.NoUpdate)
+        self.page_list.scrollToItem(self.page_list.item(index))
+        self.page_list.blockSignals(False)
+        self.page_number.blockSignals(True)
+        self.page_number.setValue(index+1)
+        self.page_number.blockSignals(False)
+        self.page_label.setText(f"{index+1} / {len(self.project.pages)}   •   Ctrl + klik: wiele stron")
+        self.sync_margin()
 
     def navigate_page(self,step):
         if self.project:
@@ -459,6 +557,7 @@ class MainWindow(QMainWindow):
     def select_tool(self,kind):
         if self.reading and kind not in {"select_text","hand"}:
             return
+        self.canvas.finish_text_edit()
         self.canvas.set_tool(kind)
         self.update_color_button(self.canvas.mark_color if kind in {"highlight","underline","strike"} else self.canvas.color)
         self.canvas.setFocus()
@@ -535,6 +634,7 @@ class MainWindow(QMainWindow):
         self.properties_dock.setVisible(not self.reading)
         self.refresh_document(True)
         self.canvas.setFocus()
+        self.statusBar().showMessage("Przewijaj dokument w dół. Kliknij pole tekstowe, aby pisać bezpośrednio na stronie.",8000)
         QTimer.singleShot(200,self.start_ocr)
 
     def new_document(self):
@@ -544,6 +644,7 @@ class MainWindow(QMainWindow):
     def save_project(self,save_as=False):
         if not self.project:
             return False
+        self.canvas.finish_text_edit()
         path = self.project.path if not save_as else None
         if not path:
             path,_ = QFileDialog.getSaveFileName(self,"Zapisz edytowalny projekt",str(Path(self.settings.value("last_dir",""))/f"{self.project.title}.smartpdf"),"Projekt Smart PDF (*.smartpdf)")
@@ -567,6 +668,7 @@ class MainWindow(QMainWindow):
     def export(self):
         if not self.project:
             return
+        self.canvas.finish_text_edit()
         path,_ = QFileDialog.getSaveFileName(self,"Eksportuj zwykły PDF",str(Path(self.settings.value("last_dir",""))/f"{self.project.title}-edycja.pdf"),"PDF (*.pdf)")
         if not path:
             return
@@ -579,6 +681,8 @@ class MainWindow(QMainWindow):
             self.error("Nie można wyeksportować PDF",error)
 
     def maybe_save(self):
+        self.canvas.finish_text_edit()
+        self.end_live_change()
         if not self.project or (self.undo.isClean() and not self.project.dirty):
             return True
         reply = QMessageBox.question(self,"Niezapisany projekt","Zapisać zmiany w edytowalnym projekcie .smartpdf?",QMessageBox.Save|QMessageBox.Discard|QMessageBox.Cancel,QMessageBox.Save)
@@ -599,56 +703,16 @@ class MainWindow(QMainWindow):
     def add_text(self,x,y):
         if not self.project or self.reading:
             return
-        dialog = TextDialog(text_html("",14,self.canvas.color),self)
-        if dialog.exec() != QDialog.Accepted or not dialog.editor.toPlainText().strip():
-            return
-        obj = make_object("text",x,y,240,130,html=dialog.html())
+        obj = make_object("text",x,y,240,60,html=text_html("",self.font_size.value(),self.canvas.color))
         self.mutate("Dodanie tekstu",lambda:self.project.pages[self.index].objects.append(obj))
-        self.tool_actions["select"].setChecked(True)
-        self.canvas.set_tool("select")
-        self.canvas.select_ids([obj["id"]])
-        self.canvas.setFocus()
+        self.tool_actions["select_text"].setChecked(True)
+        self.canvas.set_tool("select_text")
+        self.canvas.start_text_edit(obj["id"])
 
     def edit_text(self,identifier):
         if not self.project or self.reading:
             return
-        obj = next((o for o in self.project.pages[self.index].objects if o["id"]==identifier),None)
-        if not obj or obj["kind"] not in {"text","replacement"}:
-            return
-        dialog = TextDialog(obj["html"],self)
-        if dialog.exec() == QDialog.Accepted:
-            self.mutate("Zmiana tekstu",lambda:obj.update(html=dialog.html()))
-            self.canvas.select_ids([identifier])
-            self.canvas.setFocus()
-
-    def replace_text(self,words):
-        if not self.project or self.reading or not words:
-            self.statusBar().showMessage("Wybierz narzędzie Zaznacz tekst i zaznacz fragment dokumentu.",5000)
-            return
-        rects = self.canvas.selection_rects(words)
-        x,y = min(r[0] for r in rects),min(r[1] for r in rects)
-        w,h = max(r[2] for r in rects)-x,max(r[3] for r in rects)-y
-        # Preserve line boundaries instead of flattening a paragraph into one line.
-        lines = []
-        line_id = None
-        for word in words:
-            new_id = tuple(word[5:7])
-            if line_id != new_id:
-                lines.append([])
-            lines[-1].append(word[4])
-            line_id = new_id
-        original = "\n".join(" ".join(line) for line in lines)
-        font_size = max(8,min(36,(rects[0][3]-rects[0][1])*.72))
-        dialog = TextDialog(text_html(original,font_size,"#202020"),self)
-        dialog.setWindowTitle("Zmień tekst PDF • czcionka może różnić się od oryginału")
-        if dialog.exec() != QDialog.Accepted:
-            return
-        obj = make_object("replacement",x-5,y-5,max(70,w+14),max(35,h+18),html=dialog.html(),redactions=rects)
-        self.mutate("Zastąpienie tekstu PDF",lambda:self.project.pages[self.index].objects.append(obj))
-        self.tool_actions["select"].setChecked(True)
-        self.canvas.set_tool("select")
-        self.canvas.select_ids([obj["id"]])
-        self.canvas.setFocus()
+        self.canvas.start_text_edit(identifier)
 
     def duplicate(self):
         self.canvas.copy()
@@ -668,21 +732,77 @@ class MainWindow(QMainWindow):
         self.mutate("Obrót stron",change)
         self.canvas.fit_page()
 
-    def add_margin(self):
+    def local_margin_side(self,index,side=None):
+        ring = ["top","right","bottom","left"]
+        return ring[(ring.index(side or self.margin_side)-self.project.pages[index].rotation//90)%4]
+
+    def add_margin(self,side="right",indices=None):
         if not self.project or self.reading:
             return
-        dialog = ScopeDialog("Dodaj margines i miejsce na notatki",self.index,self.selected_pages(),len(self.project.pages),True,self)
-        if dialog.exec() == QDialog.Accepted:
-            side = ["right","left","top","bottom"][dialog.side.currentIndex()]
-            def change():
-                # Dialog sides refer to the page as displayed, including its rotation.
-                ring = ["top","right","bottom","left"]
-                for index in dialog.indices():
-                    rotation = self.project.pages[index].rotation//90
-                    local_side = ring[(ring.index(side)-rotation)%4]
-                    self.project.add_margin([index],local_side,dialog.width.value()*72/25.4,dialog.text.isChecked())
-            self.mutate("Dodanie marginesu",change)
-            self.canvas.fit_page()
+        self.canvas.finish_text_edit()
+        self.margin_side = side
+        targets = indices if indices is not None else [self.index]
+        width = self.margin_control.value()*72/25.4
+        def change():
+            for index in targets:
+                local = self.local_margin_side(index,side)
+                points = self.project.pages[index].margins[local] or width
+                self.project.add_margin([index],local,points)
+        self.mutate("Margines z polem na notatki",change)
+        self.properties_dock.show()
+        self.sync_margin()
+        local = self.local_margin_side(self.index,side)
+        notes = next((o for o in self.project.pages[self.index].objects if o.get("margin_side")==local),None)
+        if notes:
+            self.tool_actions["select_text"].setChecked(True)
+            self.canvas.set_tool("select_text")
+            item = self.canvas.items_by_id[notes["id"]]
+            self.canvas.ensureVisible(item,40,30)
+            self.canvas.start_text_edit(notes["id"])
+
+    def sync_margin(self):
+        if not self.project or not hasattr(self,"margin_control"):
+            return
+        points = self.project.pages[self.index].margins[self.local_margin_side(self.index)]
+        if points:
+            self.margin_control.setValue(points*25.4/72)
+        self.margin_hint.setText(("Prawy" if self.margin_side=="right" else "Lewy") + (" • przeciągnij suwak" if points else " • kliknij Margines, aby dodać"))
+
+    def begin_live_change(self):
+        self.end_live_change()
+        self.canvas.finish_text_edit()
+        if self.project and not self.reading:
+            self.live_before = self.project.snapshot()
+
+    def end_live_change(self):
+        if self.live_before is not None:
+            before,self.live_before = self.live_before,None
+            self.commit(before,self.project.snapshot(),"Zmiana suwakiem")
+
+    def live_change(self,callback):
+        if not self.project or self.reading:
+            return
+        if self.live_before is None:
+            self.mutate("Zmiana wartości",callback)
+        else:
+            callback()
+            self.project.dirty = True
+            self.canvas.show_page(self.project,self.index)
+
+    def stroke_changed(self,value):
+        self.canvas.stroke_width = value
+        if self.refreshing:
+            return
+        selected = [o for o in self.canvas.selected_objects() if o["kind"] not in {"text","replacement"}]
+        if selected:
+            self.live_change(lambda:[o.update(width=value) for o in selected])
+
+    def margin_width_changed(self,value):
+        if not self.project or self.refreshing:
+            return
+        local = self.local_margin_side(self.index)
+        if self.project.pages[self.index].margins[local]:
+            self.live_change(lambda:self.project.add_margin([self.index],local,value*72/25.4))
 
     def delete_pages(self):
         if not self.project or self.reading:
@@ -697,6 +817,9 @@ class MainWindow(QMainWindow):
     def set_color(self,color):
         self.canvas.color = self.canvas.mark_color = color
         self.update_color_button(color)
+        if self.canvas.editing:
+            self.format_text(color=color)
+            return
         selected = self.canvas.selected_objects()
         if selected:
             def change():
@@ -743,19 +866,87 @@ class MainWindow(QMainWindow):
         if self.refreshing:
             return
         selected = self.canvas.selected_objects()
+        text_selected = len(selected)==1 and selected[0]["kind"] in {"text","replacement"}
+        self.text_controls.setEnabled(text_selected and not self.reading)
         self.properties_form.setEnabled(bool(selected) and not self.reading)
         if selected:
             self.refreshing = True
             obj = selected[0]
+            if obj.get("margin_side"):
+                item = self.canvas.items_by_id[obj["id"]]
+                ring = ["top","right","bottom","left"]
+                displayed_side = ring[(ring.index(obj["margin_side"])+self.project.pages[item.page_index].rotation//90)%4]
+                if item.page_index==self.index and displayed_side in {"left","right"}:
+                    self.margin_side = displayed_side
             self.property_hint.setText(f"Wybrano obiekty: {len(selected)}\nWartości dotyczą pierwszego obiektu.")
             for key,spin in self.property_spins.items():
                 spin.setValue(obj.get(key,0))
+            if obj["kind"] not in {"text","replacement"}:
+                self.stroke.setValue(obj["width"])
             self.edit_text_button.setEnabled(len(selected)==1 and obj["kind"] in {"text","replacement"})
             self.refreshing = False
         else:
-            self.property_hint.setText("Wybierz obiekt narzędziem Obiekty.\nDwuklik na tekście otwiera edytor.")
+            self.property_hint.setText("Kliknij pole tekstowe i pisz na stronie.\nPrzesuwaj je za ramkę; uchwyty zmieniają rozmiar i obrót.")
+        self.sync_margin()
+
+    def text_editing_changed(self,editing):
+        actions = [*self.tool_actions.values(),self.copy_action,self.cut_action,self.paste_action,self.delete_action,self.duplicate_action,self.undo_action,self.redo_action]
+        for action in actions:
+            if editing:
+                action._text_shortcuts = action.shortcuts()
+                action.setShortcuts([])
+            elif hasattr(action,"_text_shortcuts"):
+                action.setShortcuts(action._text_shortcuts)
+        if hasattr(self,"text_controls"):
+            self.text_controls.setEnabled(editing)
+
+    def sync_text_format(self):
+        if not self.canvas.editing or not hasattr(self,"fonts"):
+            return
+        editor = self.canvas.editing.editor
+        fmt = editor.textCursor().charFormat()
+        widgets = [self.fonts,self.font_size,self.text_align,*self.text_buttons.values()]
+        for widget in widgets:
+            widget.blockSignals(True)
+        self.fonts.setCurrentFont(fmt.font())
+        self.font_size.setValue(round(fmt.fontPointSize() or 14))
+        self.text_buttons["bold"].setChecked(fmt.fontWeight()>=QFont.Bold)
+        self.text_buttons["italic"].setChecked(fmt.fontItalic())
+        self.text_buttons["underline"].setChecked(fmt.fontUnderline())
+        alignment = editor.textCursor().blockFormat().alignment()
+        self.text_align.setCurrentIndex(1 if alignment & Qt.AlignHCenter else 2 if alignment & Qt.AlignRight else 0)
+        for widget in widgets:
+            widget.blockSignals(False)
+
+    def format_text(self,**options):
+        if self.refreshing or self.reading or not self.project:
+            return
+        if not self.canvas.editing:
+            selected = self.canvas.selected_objects()
+            if len(selected)!=1 or selected[0]["kind"] not in {"text","replacement"}:
+                return
+            self.canvas.start_text_edit(selected[0]["id"])
+        editor = self.canvas.editing.editor
+        cursor = editor.textCursor()
+        fmt = QTextCharFormat()
+        if "font" in options: fmt.setFontFamilies([options["font"]])
+        if "size" in options: fmt.setFontPointSize(options["size"])
+        if "bold" in options: fmt.setFontWeight(QFont.Bold if options["bold"] else QFont.Normal)
+        if "italic" in options: fmt.setFontItalic(options["italic"])
+        if "underline" in options: fmt.setFontUnderline(options["underline"])
+        if "color" in options: fmt.setForeground(QColor(options["color"]))
+        if "align" in options:
+            block = cursor.blockFormat()
+            block.setAlignment([Qt.AlignLeft,Qt.AlignHCenter,Qt.AlignRight][options["align"]])
+            cursor.mergeBlockFormat(block)
+        else:
+            cursor.mergeCharFormat(fmt)
+        editor.setTextCursor(cursor)
+        editor.setFocus()
+        self.sync_text_format()
 
     def toggle_reading(self,checked):
+        self.canvas.finish_text_edit()
         self.reading = bool(checked)
         self.canvas.reading = self.reading
         self.tools.setVisible(bool(self.project) and not checked)
@@ -763,7 +954,7 @@ class MainWindow(QMainWindow):
         self.pages_dock.setVisible(bool(self.project) and not checked)
         self.page_list.setDragDropMode(QAbstractItemView.NoDragDrop if checked else QAbstractItemView.InternalMove)
         self.canvas.scene().clearSelection()
-        kind = "select_text" if checked else "select"
+        kind = "select_text"
         self.tool_actions[kind].setChecked(True)
         self.canvas.set_tool(kind)
         for action in (self.undo_action,self.redo_action,self.rotate_action,self.margin_action):
@@ -916,7 +1107,7 @@ class MainWindow(QMainWindow):
             self.ocr_process.kill()
             self.ocr_process.waitForFinished(3000)
         self.ocr_temp = None
-        self.ocr_status.setText("OCR zatrzymany")
+        self.ocr_status.setText("OCR wyłączony")
 
     def ocr_settings(self):
         dialog = QDialog(self)

@@ -6,7 +6,7 @@ Lokalny edytor PDF dla Windows, z interfejsem po polsku, OCR polskim i angielski
 
 ## Instalacja
 
-Pobierz **SmartPDF-Setup-0.1.0-x64.exe** z [Releases](https://github.com/szymongazinski/smart-pdf/releases).
+Pobierz **SmartPDF-Setup-0.2.0-x64.exe** z [Releases](https://github.com/szymongazinski/smart-pdf/releases).
 Instalator działa bez uprawnień administratora. Dodaje program do menu Start, dzięki czemu
 można znaleźć go w wyszukiwarce Windows. Pyta o skrót na pulpicie, dodanie do menu
 **Otwórz za pomocą** dla PDF i powiązanie projektów `.smartpdf`.
@@ -15,18 +15,32 @@ Nie zmienia automatycznie domyślnej aplikacji dla PDF. W Windows można ją wyb
 Program i instalator nie mają jeszcze komercyjnego podpisu cyfrowego. Windows może wyświetlić ekran SmartScreen.
 Nie jest wymagany Python ani osobna instalacja Tesseract. Modele OCR są zawarte w instalatorze.
 
+## Aktualizacja istniejącej instalacji
+
+Jeśli masz wersję 0.1.0, uruchom **SmartPDF-Update-0.2.0-x64.exe** z tego samego wydania.
+Aktualizator znajduje istniejącą instalację, podmienia pliki i zachowuje ustawienia,
+projekty oraz wybrane skróty. Nie trzeba odinstalowywać programu ani przechodzić ponownie
+przez wybór folderu i skrótów. Przed aktualizacją zapisz pracę i zamknij Smart PDF.
+Od wersji 0.2.0 użyj przycisku **Sprawdź aktualizacje** albo menu **Pomoc**.
+Program sprawdza GitHub dopiero na kliknięcie i weryfikuje SHA256 przed uruchomieniem aktualizatora.
+
 ## Funkcje
 
 * Pióro z kolorami, grubością i kryciem; linia, okrąg/elipsa, trójkąt i prostokąt.
 * Zaznaczanie tekstu i kopiowanie. Zakreślacz, podkreślenie i przekreślenie w różnych kolorach.
 * Lokalny OCR Tesseract LSTM z modelami `tessdata_best`, domyślnie polski + angielski i 300 DPI.
-  Automatyczny OCR można wyłączyć lub anulować. Wyniki są zachowywane w projekcie i eksportowane jako niewidoczna warstwa tekstowa.
+  OCR jest domyślnie wyłączony; przycisk **OCR** uruchamia rozpoznawanie. Tryb automatyczny można włączyć w menu OCR na bieżącą sesję.
+  Wyniki są zachowywane w projekcie i eksportowane jako niewidoczna warstwa tekstowa.
   Można również ponownie rozpoznać zaznaczone skany, np. po poprawieniu ich obrotu.
 * Pola tekstowe z formatowaniem fragmentów: czcionka, rozmiar, pogrubienie, kursywa, podkreślenie, kolor i wyrównanie.
-  Przesuwanie, zmiana rozmiaru i dowolny obrót obiektów; Shift przy obrocie ustala krok 15°.
-* Zmiana istniejącego tekstu: zaznacz tekst, wybierz **Zmień tekst**, wpisz nową treść.
-  W projekcie oryginał jest zachowany. Eksport usuwa zastępowany tekst lub piksele skanu i dodaje nowy tekst.
-* Margines z dowolnej strony, podana szerokość w mm i domyślne pole na notatki.
+  Pisanie bezpośrednio na PDF po jednym kliknięciu, również w trybie zaznaczania tekstu.
+  Przesuwanie za ramkę, zmiana rozmiaru i dowolny obrót obiektów; Shift przy obrocie ustala krok 15°.
+* Przycisk **Margines** natychmiast dodaje prawy margines i puste pole na notatki; menu strzałki udostępnia lewy margines.
+  Każda strona może mieć po jednym marginesie z lewej i z prawej. Ponowne kliknięcie otwiera istniejące notatki.
+  Suwak szerokości zmienia margines i pole na żywo.
+* Suwak grubości zmienia rysowanie i zaznaczone kształty na żywo; jeden ruch suwaka to jedna operacja cofania.
+* Cały dokument przewijany pionowo. Ostre fragmenty podglądu są renderowane do aktualnego zoomu i skali ekranu.
+  Pamięć podręczna rastrów jest ograniczona do 64 MB; jakość eksportu pochodzi z oryginalnego PDF, nie z podglądu.
 * Obracanie bieżącej strony, stron wybranych przez Ctrl+klik lub całego dokumentu.
 * Małe podglądy stron w panelu bocznym, przestawianie przez przeciąganie i usuwanie stron.
 * Cofanie/ponawianie, kopiowanie/wycinanie/wklejanie i powielanie obiektów.
@@ -61,7 +75,9 @@ Eksport PDF nie zastępuje zapisu projektu. Pliki są zapisywane atomowo, aby b�
 | Ctrl+Shift+R / F11 | Tryb odczytu / pełny ekran |
 
 Skróty obiektów i pojedyncze litery narzędzi działają, gdy aktywny jest obszar dokumentu.
-Dwuklik na polu tekstowym otwiera edytor formatowania. Uchwyt w prawym dolnym rogu zmienia rozmiar,
+Kliknij pole tekstowe, aby pisać. Formatowanie jest w panelu obok. Escape kończy pisanie.
+Podczas pisania Ctrl+Z/Y i Ctrl+C/X/V dotyczą tekstu w polu; Ctrl+B/I/U zmienia formatowanie.
+Uchwyt w prawym dolnym rogu zmienia rozmiar,
 a okrąg nad obiektem pozwala go obracać.
 Shift podczas rysowania okręgu lub prostokąta ustala równe wymiary; przy linii kąt co 45°.
 
@@ -79,16 +95,15 @@ Zmiana języków w ustawieniach dotyczy kolejnych rozpoznawanych stron.
 
 ## Zakres pierwszej wersji
 
-To wersja **0.1.0**. Zmiana istniejącego tekstu zastępuje wybrany fragment nowym polem;
-nie rekonstruuje składu całej strony i może użyć innej czcionki. Tło zastępowanego obszaru jest białe.
-Tekst dłuższy niż pole wymaga powiększenia pola. Zaznaczanie działa na poziomie słów i linii;
+To wersja **0.2.0**. Opcja zmiany oryginalnego tekstu PDF została usunięta.
+Starsze projekty z takimi obiektami nadal się otwierają i eksportują.
+Zaznaczanie działa na poziomie słów i linii, w obrębie jednej strony;
 skomplikowany układ wielokolumnowy może wymagać zaznaczania mniejszych fragmentów.
 
 Istniejące adnotacje i formularze są podczas importu zamieniane na stałą treść wizualną.
 Podpisy cyfrowe, interaktywność formularzy i hiperłącza nie są zachowywane w eksporcie.
 Import PDF chronionego hasłem wymaga hasła; projekt i eksport są zapisywane bez szyfrowania.
-Zastępowanie tekstu nie jest narzędziem do bezpiecznej redakcji całego dokumentu:
-oryginał pozostaje w `.smartpdf`, a eksport nie usuwa automatycznie wszystkich metadanych i załączników.
+Format projektu zachowuje oryginał, a eksport nie usuwa automatycznie wszystkich metadanych i załączników.
 
 ## Uruchamianie ze źródeł
 
@@ -112,10 +127,12 @@ winget install --id JRSoftware.InnoSetup --exact
 ./scripts/build.ps1
 ```
 
-Wyniki: `dist/SmartPDF/SmartPDF.exe` i `dist/installer/SmartPDF-Setup-0.1.0-x64.exe`.
+Wyniki: `dist/SmartPDF/SmartPDF.exe`, `dist/installer/SmartPDF-Setup-0.2.0-x64.exe`
+oraz `dist/installer/SmartPDF-Update-0.2.0-x64.exe`.
 Testy sprawdzają round-trip projektów, atomowy zapis, eksport tekstu Unicode,
 geometrię stron i marginesów, zastępowanie tekstu, prawdziwy OCR, wektorowe kształty,
-cofanie/ponawianie i podstawowe interakcje interfejsu.
+cofanie/ponawianie, pisanie na stronie, suwaki, ciągłe przewijanie, ostrość kafelków
+oraz weryfikację pobranych aktualizacji.
 Gotowy szablon GitHub Actions znajduje się w `scripts/github-actions-build.yml`.
 Po skopiowaniu go do `.github/workflows/build.yml` testuje i buduje również tagi wydań.
 Do dodania aktywnego workflow na GitHub potrzebne jest uprawnienie `workflow` tokenu.
