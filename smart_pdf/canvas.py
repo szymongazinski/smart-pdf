@@ -431,6 +431,9 @@ class Canvas(QGraphicsView):
         else:
             self.tile_cache.move_to_end(cache_key)
         item = self.scene().addPixmap(tile[0])
+        # QGraphicsPixmapItem overrides the view's smoothing hint. Nearest
+        # neighbour downsampling can drop the thin strokes of serif fonts.
+        item.setTransformationMode(Qt.SmoothTransformation)
         item.setParentItem(self.roots[index])
         item.setScale(1/resolution)
         item.setPos(tile[1]+state.margins["left"],tile[2]+state.margins["top"])

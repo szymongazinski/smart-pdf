@@ -38,7 +38,7 @@ def main():
     window.show()
     if smoke:
         from smart_pdf.smoke import run_smoke
-        run_smoke(app,window,sys.argv[2])
+        run_smoke(app,window,sys.argv[2],sys.argv[3] if len(sys.argv)>3 else None)
     if len(sys.argv) > 1 and not sys.argv[1].startswith("--"):
         window.open_path(sys.argv[1])
     return app.exec()

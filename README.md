@@ -6,7 +6,7 @@ Lokalny edytor PDF dla Windows, z interfejsem po polsku, OCR polskim i angielski
 
 ## Instalacja
 
-Pobierz **SmartPDF-Setup-0.2.0-x64.exe** z [Releases](https://github.com/szymongazinski/smart-pdf/releases).
+Pobierz **SmartPDF-Setup-0.2.1-x64.exe** z [Releases](https://github.com/szymongazinski/smart-pdf/releases).
 Instalator działa bez uprawnień administratora. Dodaje program do menu Start, dzięki czemu
 można znaleźć go w wyszukiwarce Windows. Pyta o skrót na pulpicie, dodanie do menu
 **Otwórz za pomocą** dla PDF i powiązanie projektów `.smartpdf`.
@@ -17,7 +17,8 @@ Nie jest wymagany Python ani osobna instalacja Tesseract. Modele OCR są zawarte
 
 ## Aktualizacja istniejącej instalacji
 
-Jeśli masz wersję 0.1.0, uruchom **SmartPDF-Update-0.2.0-x64.exe** z tego samego wydania.
+Możesz też uruchomić **SmartPDF-Update-0.2.1-x64.exe** z tego samego wydania,
+również jeśli masz wersję 0.1.0 bez przycisku sprawdzania aktualizacji.
 Aktualizator znajduje istniejącą instalację, podmienia pliki i zachowuje ustawienia,
 projekty oraz wybrane skróty. Nie trzeba odinstalowywać programu ani przechodzić ponownie
 przez wybór folderu i skrótów. Przed aktualizacją zapisz pracę i zamknij Smart PDF.
@@ -95,7 +96,8 @@ Zmiana języków w ustawieniach dotyczy kolejnych rozpoznawanych stron.
 
 ## Zakres pierwszej wersji
 
-To wersja **0.2.0**. Opcja zmiany oryginalnego tekstu PDF została usunięta.
+To wersja **0.2.1**. Naprawia znikające cienkie kreski liter w podglądzie przy skalowaniu.
+Opcja zmiany oryginalnego tekstu PDF została usunięta.
 Starsze projekty z takimi obiektami nadal się otwierają i eksportują.
 Zaznaczanie działa na poziomie słów i linii, w obrębie jednej strony;
 skomplikowany układ wielokolumnowy może wymagać zaznaczania mniejszych fragmentów.
@@ -127,17 +129,20 @@ winget install --id JRSoftware.InnoSetup --exact
 ./scripts/build.ps1
 ```
 
-Wyniki: `dist/SmartPDF/SmartPDF.exe`, `dist/installer/SmartPDF-Setup-0.2.0-x64.exe`
-oraz `dist/installer/SmartPDF-Update-0.2.0-x64.exe`.
+Wyniki: `dist/SmartPDF/SmartPDF.exe`, `dist/installer/SmartPDF-Setup-0.2.1-x64.exe`
+oraz `dist/installer/SmartPDF-Update-0.2.1-x64.exe`.
 Testy sprawdzają round-trip projektów, atomowy zapis, eksport tekstu Unicode,
 geometrię stron i marginesów, zastępowanie tekstu, prawdziwy OCR, wektorowe kształty,
-cofanie/ponawianie, pisanie na stronie, suwaki, ciągłe przewijanie, ostrość kafelków
+cofanie/ponawianie, pisanie na stronie, suwaki, ciągłe przewijanie, zachowanie cienkich
+kresek w obrazie przy różnych powiększeniach i obrotach, ostrość kafelków
 oraz weryfikację pobranych aktualizacji.
 Gotowy szablon GitHub Actions znajduje się w `scripts/github-actions-build.yml`.
 Po skopiowaniu go do `.github/workflows/build.yml` testuje i buduje również tagi wydań.
 Do dodania aktywnego workflow na GitHub potrzebne jest uprawnienie `workflow` tokenu.
 Test samodzielnego EXE: `SmartPDF.exe --self-test 'C:\Temp\SmartPDF-test'`.
 Tworzy wyłącznie własne dane testowe, sprawdza zapis i eksport i kończy działanie.
+Opcjonalny trzeci argument ze ścieżką do lokalnego PDF dodaje zrzuty jego podglądu
+przy 125%, 175%, 210% i 300%, zapisane wyłącznie w podanym katalogu testowym.
 
 ## Licencja
 

@@ -1,4 +1,5 @@
 import io
+import math
 import hashlib
 
 import pymupdf
@@ -10,6 +11,7 @@ from PySide6.QtTest import QTest
 from smart_pdf.model import Project, make_object, text_html
 from smart_pdf.updates import DOWNLOAD_PREFIX, choose_update, download_verified
 from smart_pdf.window import MainWindow
+from smart_pdf.canvas import Canvas
 from test_ui import create_window, finish, view_point
 
 
@@ -196,6 +198,50 @@ def test_continuous_scroll_and_zoom_uses_sharp_bounded_tiles(app,tmp_path):
     assert canvas.tile_bytes<=64*1024*1024
     assert len({key[0] for key in canvas.backgrounds})<=2
     finish(window,app)
+
+
+@pytest.mark.parametrize("zoom",[125,175,210,300])
+@pytest.mark.parametrize("rotation",[0,90])
+def test_preview_keeps_thin_strokes_at_fractional_scale(app,tmp_path,zoom,rotation):
+    """Test pixels: nearest-neighbour sampling erases entire hairline strokes."""
+    path = tmp_path/"thin-strokes.pdf"
+    with pymupdf.open() as doc:
+        page = doc.new_page(width=300,height=250)
+        for i in range(30):
+            page.draw_line((20,20+5.07*i),(180,20+5.07*i),width=.12)
+        page.insert_text((20,195),"Thin serif strokes 12345",fontsize=12,fontname="tiro")
+        doc.save(path)
+    project = Project.from_pdf(path)
+    project.pages[0].rotation = rotation
+    canvas = Canvas()
+    canvas.resize(1050,900)
+    canvas.show()
+    canvas.show_page(project,0)
+    canvas.set_zoom(zoom)
+    canvas.centerOn(canvas.roots[0].mapToScene(QPointF(150,125)))
+    QTest.qWait(100)
+    canvas.update_visible_pages()
+    while canvas.render_queue:
+        canvas.render_next_tile()
+    canvas.remove_old_tiles()
+    image = canvas.viewport().grab().toImage()
+    ratio = image.devicePixelRatio()
+    radius = math.ceil(2*ratio)
+    try:
+        for i in range(30):
+            point = canvas.mapFromScene(canvas.roots[0].mapToScene(QPointF(80,20+5.07*i)))
+            x,y = round(point.x()*ratio),round(point.y()*ratio)
+            pixels = [(x+offset,y) if rotation else (x,y+offset)
+                      for offset in range(-radius,radius+1)]
+            darkness = max(255-image.pixelColor(px,py).red() for px,py in pixels)
+            assert darkness>=5, f"Stroke {i} vanished at {zoom}% / rotation {rotation}"
+    finally:
+        canvas.render_timer.stop()
+        canvas.view_timer.stop()
+        canvas.close()
+        canvas.deleteLater()
+        app.processEvents()
+        project.doc.close()
 
 
 def test_ocr_starts_off_even_when_old_setting_was_on(app):
