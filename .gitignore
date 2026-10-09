@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+output/
+tmp/
+assets/tessdata/*.traineddata
+*.smartpdf
+*.pdf
+!tests/fixtures/*.pdf

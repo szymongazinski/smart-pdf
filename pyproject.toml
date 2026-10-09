@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smart-pdf"
+version = "0.1.0"
+description = "Local-first PDF editor for Windows with editable projects and offline OCR"
+requires-python = ">=3.11"
+license = "AGPL-3.0-or-later"
+dependencies = ["PySide6-Essentials==6.12.0", "PyMuPDF==1.28.2"]
+
+[project.optional-dependencies]
+dev = ["pytest==9.1.1", "pyinstaller==6.22.3"]
+
+[project.gui-scripts]
+smart-pdf = "smart_pdf.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["smart_pdf*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
