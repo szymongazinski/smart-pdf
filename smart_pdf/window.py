@@ -22,7 +22,7 @@ from smart_pdf.dialogs import ScopeDialog
 from smart_pdf.controls import DockTitle, PageDelegate, ValueSlider
 from smart_pdf.export import export_pdf
 from smart_pdf.model import Project, make_object, text_html, uid
-from smart_pdf.ocr import available_languages, resources
+from smart_pdf.ocr import available_languages, resources,ENGINE_OPTIONS
 from smart_pdf.style import STYLE
 
 
@@ -1046,6 +1046,7 @@ class MainWindow(QMainWindow):
         self.ocr_queue = sorted({p.source for p in candidates if self.project.needs_ocr(p.source) or
                                  (repeat and len(self.project.doc[p.source].get_text().strip())<20)})
         self.ocr_total,self.ocr_done = len(self.ocr_queue),0
+        self.ocr_backends = set()
         if not self.ocr_queue:
             self.ocr_status.setText("Warstwa tekstu dostępna")
             return
@@ -1055,7 +1056,8 @@ class MainWindow(QMainWindow):
 
     def ocr_next(self):
         if not self.ocr_queue or not self.project:
-            self.ocr_status.setText(f"OCR ukończony ({self.ocr_done} stron)")
+            backend = "GPU" if "gpu" in getattr(self,"ocr_backends",set()) else "CPU"
+            self.ocr_status.setText(f"OCR ukończony • {backend} ({self.ocr_done} stron)")
             self.ocr_current = None
             return
         source = self.ocr_queue.pop(0)
@@ -1063,7 +1065,7 @@ class MainWindow(QMainWindow):
         self.ocr_current = (source,output)
         languages = self.settings.value("ocr_languages","pol+eng")
         orientation = self.project.pages[self.index].rotation if self.project.pages[self.index].source==source else next(p.rotation for p in self.project.pages if p.source==source)
-        args = ["--ocr-worker",str(Path(self.ocr_temp.path(),"source.pdf")),output,str(source),languages,str(self.settings.value("ocr_dpi",300,type=int)),str(orientation)]
+        args = ["--ocr-worker",str(Path(self.ocr_temp.path(),"source.pdf")),output,str(source),languages,str(self.settings.value("ocr_dpi",300,type=int)),str(orientation),self.settings.value("ocr_engine","auto")]
         if not getattr(sys,"frozen",False):
             args = ["-m","smart_pdf",*args]
         self.ocr_status.setText(f"OCR lokalny • {self.ocr_done+1} / {self.ocr_total}")
@@ -1084,6 +1086,13 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("OCR nie powiódł się: "+detail[:300],15000)
             return
         self.project.ocr[source] = Path(output).read_bytes()
+        report_path = Path(output+".json")
+        if report_path.exists():
+            import json
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            self.ocr_backends.add(report["backend"])
+            if report.get("fallback"):
+                self.statusBar().showMessage(report["fallback"],15000)
         self.project.ocr_languages[source] = self.settings.value("ocr_languages","pol+eng")
         self.project.cache_dirty = True
         self.revision += 1
@@ -1113,6 +1122,11 @@ class MainWindow(QMainWindow):
         dialog = QDialog(self)
         dialog.setWindowTitle("Ustawienia lokalnego OCR")
         form = QFormLayout(dialog)
+        engine = QComboBox()
+        for code,label in ENGINE_OPTIONS:
+            engine.addItem(label,code)
+        engine.setCurrentIndex(max(0,engine.findData(self.settings.value("ocr_engine","auto"))))
+        form.addRow("Obliczenia",engine)
         languages = QComboBox()
         languages.addItems(["Polski + angielski","Polski","Angielski"])
         codes = ["pol+eng","pol","eng"]
@@ -1123,13 +1137,16 @@ class MainWindow(QMainWindow):
         quality.addItems(["200 DPI — szybciej","300 DPI — domyślnie","400 DPI — drobny tekst"])
         quality.setCurrentIndex([200,300,400].index(self.settings.value("ocr_dpi",300,type=int)))
         form.addRow("Jakość",quality)
-        form.addRow(QLabel("Tesseract LSTM / tessdata_best\nOCR używa lokalnego CPU (do 2 wątków), bez połączenia z internetem.\nAutomatycznie rozpoznaje strony bez użytecznej warstwy tekstu.\nZmiana języka dotyczy kolejnych rozpoznawanych stron."))
+        description = QLabel("PP-OCRv5 — dokładny model wykrywania tekstu i rozpoznawanie polskiego oraz angielskiego.\nTryb GPU używa DirectML; tryb zalecany przechodzi na CPU, gdy GPU jest niedostępne.\nTesseract tessdata_best dodatkowo sprawdza mniej pewne fragmenty.\nWszystko działa lokalnie, bez wysyłania dokumentów do internetu.")
+        description.setWordWrap(True)
+        form.addRow(description)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok|QDialogButtonBox.Cancel)
         form.addRow(buttons)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         if dialog.exec()==QDialog.Accepted:
             self.cancel_ocr()
+            self.settings.setValue("ocr_engine",engine.currentData())
             self.settings.setValue("ocr_languages",codes[languages.currentIndex()])
             self.settings.setValue("ocr_dpi",[200,300,400][quality.currentIndex()])
             self.start_ocr()

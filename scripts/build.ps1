@@ -4,6 +4,8 @@ $taskRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $taskRoot
 python scripts/fetch_ocr.py
 if ($LASTEXITCODE -ne 0) { throw 'Nie udało się pobrać modeli OCR.' }
+python scripts/fetch_gpu_ocr.py
+if ($LASTEXITCODE -ne 0) { throw 'Nie udało się pobrać modeli OCR GPU.' }
 python -m PyInstaller --noconfirm SmartPDF.spec
 if ($LASTEXITCODE -ne 0) { throw 'Nie udało się zbudować programu.' }
 if (-not $SkipInstaller) {

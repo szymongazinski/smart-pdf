@@ -64,3 +64,63 @@ def run_smoke(app,window,directory,preview_path=None):
             (directory/"result.json").write_text(json.dumps({"ok":False,"error":str(error)}),encoding="utf-8")
             app.exit(1)
     QTimer.singleShot(300,check)
+
+
+def run_ocr_smoke(app,directory,engine="auto"):
+    """Exercise the real context-menu dialog, subprocess and atomic replacement."""
+    import hashlib,time
+    from PySide6.QtCore import QSettings
+    from smart_pdf.export import overlay_pdf
+    from smart_pdf.ocr_dialog import OCRFileDialog
+    directory = Path(directory)
+    directory.mkdir(parents=True,exist_ok=True)
+    project = Project.blank()
+    project.pages[0].objects.append(make_object("text",45,60,490,150,
+        html=text_html("Dokument Smart PDF\nPolski tekst: Zażółć gęślą jaźń.\nEnglish text: The quick brown fox.",22,"#111111")))
+    with pymupdf.open(stream=overlay_pdf(project.pages[0]),filetype="pdf") as vector:
+        png = vector[0].get_pixmap(dpi=200).tobytes("png")
+    source = directory/"OCR test — polski.pdf"
+    with pymupdf.open() as doc:
+        page = doc.new_page()
+        page.insert_image(page.rect,stream=png)
+        page.set_rotation(270)
+        doc.new_page().insert_text((40,80),"Native selectable text stays unchanged",fontsize=16)
+        doc.save(source)
+    original = source.read_bytes()
+    (directory/"original.pdf").write_bytes(original)
+    project.doc.close()
+    QSettings().setValue("ocr_engine",engine)
+    QSettings().setValue("ocr_languages","pol+eng")
+    QSettings().setValue("ocr_dpi",300)
+    dialog = OCRFileDialog(source)
+    dialog.show()
+    started = time.monotonic()
+    timer = QTimer(dialog)
+    timer.setInterval(150)
+    def check():
+        if not dialog.ocr_result and time.monotonic()-started<55 and not dialog.label.text().startswith("Nie udało"):
+            return
+        timer.stop()
+        try:
+            assert dialog.ocr_result,dialog.detail.text()
+            report = dialog.ocr_result
+            assert report["changed"] and report["pages_done"]==1 and report["pages_skipped"]==1
+            assert Path(report["backup"]).read_bytes()==original
+            with pymupdf.open(stream=original,filetype="pdf") as before,pymupdf.open(source) as after:
+                assert "Zażółć" in after[0].get_text()
+                assert "quick" in after[0].get_text()
+                for a,b in zip(before,after):
+                    assert a.get_pixmap().samples==b.get_pixmap().samples
+                    assert a.rotation==b.rotation
+            dialog.grab().save(str(directory/"ocr-dialog.png"))
+            (directory/"result.json").write_text(json.dumps({"ok":True,"report":report}),encoding="utf-8")
+            dialog.reject()
+            app.exit(0)
+        except Exception as error:
+            dialog.grab().save(str(directory/"ocr-error.png"))
+            (directory/"result.json").write_text(json.dumps({"ok":False,"error":str(error)}),encoding="utf-8")
+            dialog.reject()
+            app.exit(1)
+    timer.timeout.connect(check)
+    timer.start()
+    return dialog

@@ -4,6 +4,9 @@ from pathlib import Path
 
 
 def main():
+    if len(sys.argv)>2 and sys.argv[1]=="--ocr-file-worker":
+        from smart_pdf.ocr_file import run_file_worker
+        return run_file_worker(sys.argv[2])
     if len(sys.argv) > 1 and sys.argv[1] == "--ocr-worker":
         from smart_pdf.ocr import run_worker
         try:
@@ -19,7 +22,7 @@ def main():
     from PySide6.QtWidgets import QApplication
     from smart_pdf.ocr import resources
     from smart_pdf.window import MainWindow
-    smoke = len(sys.argv)>2 and sys.argv[1]=="--self-test"
+    smoke = len(sys.argv)>2 and sys.argv[1] in {"--self-test","--self-test-ocr"}
     QCoreApplication.setOrganizationName("SmartPDFSmoke" if smoke else "SmartPDF")
     QCoreApplication.setApplicationName("SmartPDFSmoke" if smoke else "Smart PDF")
     app = QApplication(sys.argv)
@@ -34,6 +37,15 @@ def main():
         palette.setColor(role,QColor(value))
     app.setPalette(palette)
     app.setWindowIcon(QIcon(str(resources() / "smart-pdf.ico")))
+    if len(sys.argv)>2 and sys.argv[1]=="--self-test-ocr":
+        from smart_pdf.smoke import run_ocr_smoke
+        window = run_ocr_smoke(app,sys.argv[2],sys.argv[3] if len(sys.argv)>3 else "auto")
+        return app.exec()
+    if len(sys.argv)>2 and sys.argv[1]=="--ocr-in-place":
+        from smart_pdf.ocr_dialog import OCRFileDialog
+        window = OCRFileDialog(sys.argv[2])
+        window.show()
+        return app.exec()
     window = MainWindow()
     window.show()
     if smoke:

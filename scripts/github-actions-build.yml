@@ -19,7 +19,9 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -e '.[dev]'
       - name: Fetch pinned OCR models
-        run: python scripts/fetch_ocr.py
+        run: |
+          python scripts/fetch_ocr.py
+          python scripts/fetch_gpu_ocr.py
       - name: Tests
         run: python -m pytest -q
       - name: Build executable

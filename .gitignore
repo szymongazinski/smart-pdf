@@ -8,6 +8,8 @@ dist/
 output/
 tmp/
 assets/tessdata/*.traineddata
+assets/ppocr/*.onnx
+assets/ppocr/*.part
 *.smartpdf
 *.pdf
 !tests/fixtures/*.pdf

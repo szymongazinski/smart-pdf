@@ -17,6 +17,25 @@ source, build scripts and release tags are at https://github.com/szymongazinski/
   https://github.com/tesseract-ocr/tesseract and
   https://github.com/tesseract-ocr/tessdata_best. Model revision and SHA256 digests
   are in `assets/ocr-models.json`.
+* **RapidOCR / RapidAI** and the converted **PaddleOCR PP-OCRv5** models:
+  Apache-2.0, https://github.com/RapidAI/RapidOCR and
+  https://github.com/PaddlePaddle/PaddleOCR. Pinned model URLs and SHA256 hashes
+  are in `assets/ppocr-models.json`. These models are used offline.
+* **ONNX Runtime / DirectML** (Microsoft): MIT, https://github.com/microsoft/onnxruntime
+  and https://github.com/microsoft/DirectML. Upstream licenses and notices are
+  retained in the bundled wheel metadata and ONNX Runtime package.
+* **Noto Sans** (Google / Noto contributors): SIL Open Font License 1.1.
+  https://github.com/notofonts/noto-fonts. License: `licenses/NotoSans-OFL.txt`;
+  source revision and checksum: `assets/font-source.json`. Embedded only for
+  the invisible Unicode OCR layer; original document fonts are preserved.
+* Neural OCR support libraries: **NumPy** (BSD-3-Clause), **OpenCV** (Apache-2.0),
+  **Pillow** (HPND), **Shapely** (BSD-3-Clause, GEOS LGPL-2.1), **pyclipper**
+  (MIT / Boost Software License), **OmegaConf** (BSD-3-Clause), **PyYAML** (MIT),
+  **requests** (Apache-2.0), **urllib3** (MIT), **certifi** (MPL-2.0),
+  **idna** and **charset-normalizer** (BSD-3-Clause / MIT), **six** (MIT),
+  **tqdm** (MPL-2.0 / MIT), **colorlog** (MIT), **flatbuffers** (Apache-2.0),
+  **protobuf** (BSD-3-Clause), and **packaging** (Apache-2.0 / BSD-2-Clause).
+  Respective upstream license files are retained in bundled package metadata.
 * **Python** (Python Software Foundation): PSF License,
   https://docs.python.org/3/license.html. Runtime license is included by PyInstaller.
 * **PyInstaller**: GPL-2.0-or-later with a distribution exception,

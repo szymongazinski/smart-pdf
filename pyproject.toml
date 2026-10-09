@@ -4,11 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "smart-pdf"
-version = "0.2.1"
+version = "0.3.0"
 description = "Local-first PDF editor for Windows with editable projects and offline OCR"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = "AGPL-3.0-or-later"
-dependencies = ["PySide6-Essentials==6.12.0", "PyMuPDF==1.28.2"]
+dependencies = ["PySide6-Essentials==6.12.0", "PyMuPDF==1.28.2", "rapidocr==3.10.0",
+                "onnxruntime-directml==1.24.4; sys_platform == 'win32'",
+                "onnxruntime==1.24.4; sys_platform != 'win32'",
+                "numpy==2.5.3", "opencv-python-headless==5.0.0.93", "Pillow==12.3.0"]
 
 [project.optional-dependencies]
 dev = ["pytest==9.1.1", "pyinstaller==6.22.3"]
