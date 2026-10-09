@@ -46,7 +46,7 @@ Root: HKCU; Subkey: "Software\Classes\Applications\SmartPDF.exe"; ValueType: str
 Root: HKCU; Subkey: "Software\Classes\Applications\SmartPDF.exe\shell\open\command"; ValueType: string; ValueData: """{app}\SmartPDF.exe"" ""%1"""; Tasks: pdfopenwith
 Root: HKCU; Subkey: "Software\Classes\Applications\SmartPDF.exe\SupportedTypes"; ValueType: string; ValueName: ".pdf"; ValueData: ""; Tasks: pdfopenwith
 Root: HKCU; Subkey: "Software\Classes\.pdf\OpenWithList\SmartPDF.exe"; Flags: uninsdeletekey; Tasks: pdfopenwith
-Root: HKCU; Subkey: "Software\Classes\.pdf\OpenWithProgids"; ValueType: none; ValueName: "SmartPDF.PDF"; Flags: uninsdeletevalue; Tasks: pdfopenwith
+Root: HKCU; Subkey: "Software\Classes\.pdf\OpenWithProgids"; ValueType: string; ValueName: "SmartPDF.PDF"; ValueData: ""; Flags: uninsdeletevalue; Tasks: pdfopenwith
 Root: HKCU; Subkey: "Software\Classes\SmartPDF.PDF"; ValueType: string; ValueData: "PDF document"; Flags: uninsdeletekey; Tasks: pdfopenwith
 Root: HKCU; Subkey: "Software\Classes\SmartPDF.PDF\DefaultIcon"; ValueType: string; ValueData: "{app}\SmartPDF.exe,0"; Tasks: pdfopenwith
 Root: HKCU; Subkey: "Software\Classes\SmartPDF.PDF\shell\open\command"; ValueType: string; ValueData: """{app}\SmartPDF.exe"" ""%1"""; Tasks: pdfopenwith
