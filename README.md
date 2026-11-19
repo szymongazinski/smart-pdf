@@ -105,6 +105,28 @@ Uchwyt w prawym dolnym rogu zmienia rozmiar,
 a okrąg nad obiektem pozwala go obracać.
 Shift podczas rysowania okręgu lub prostokąta ustala równe wymiary; przy linii kąt co 45°.
 
+## Wycinanie stron
+
+Wybierz **Strony → Wytnij strony…** albo przycisk pod listą stron.
+Tryb **Zostaw tylko wskazane strony** zachowuje podane strony, a **Usuń wskazane
+strony** zachowuje pozostałe. Wpisuj pojedyncze numery lub zakresy, np.
+`11-19 i 20-35, 42`. Numery oznaczają fizyczną kolejność w PDF-ie, od 1;
+numer wydrukowany na stronie może być inny.
+
+Parser ignoruje słowa i pozostałe znaki między liczbami oraz myślnikami:
+`11dowolny tekst-14` oznacza strony 11-14. Spacje/słowa bez myślnika
+oddzielają numery: `11 i 14` oznacza tylko dwie strony. Obsługiwane są też
+wklejane warianty myślnika `–`, `—`, `−`. Powtórzenia i nakładające się
+zakresy są łączone, kolejność dokumentu zostaje zachowana.
+
+Okno na bieżąco pokazuje rozpoznane strony i liczbę pozostałych/usuniętych.
+Błędne zakresy i usunięcie wszystkich stron blokują zastosowanie.
+Ctrl+Z/Y cofa i ponawia operację razem z notatkami, obrotami i marginesami.
+Projekt `.smartpdf` i eksport PDF zapisują wybrane strony; plik źródłowy
+pozostaje bez zmian do chwili świadomego eksportu pod tę samą ścieżkę.
+Format projektu nadal przechowuje pełny oryginał do edycji, więc do udostępnienia
+wybranych stron używaj eksportu PDF.
+
 ## OCR i prywatność
 
 OCR działa w osobnym procesie. Zalecany tryb używa GPU przez ONNX Runtime DirectML,
@@ -126,7 +148,9 @@ Zmiana języków w ustawieniach dotyczy kolejnych rozpoznawanych stron.
 
 ## Zakres pierwszej wersji
 
-To wersja **0.3.0**. Zawiera OCR z menu pliku PDF, przyspieszenie GPU oraz poprawkę
+To wersja **0.4.0**. Dodaje wycinanie stron według zakresów oraz naprawia błąd
+`WinError 5` przy równoczesnym odczycie i publikowaniu raportu OCR w Windows.
+Zawiera OCR z menu pliku PDF, przyspieszenie GPU oraz poprawkę
 znikających cienkich kresek liter w podglądzie przy skalowaniu.
 Opcja zmiany oryginalnego tekstu PDF została usunięta.
 Starsze projekty z takimi obiektami nadal się otwierają i eksportują.
@@ -161,8 +185,8 @@ winget install --id JRSoftware.InnoSetup --exact
 ./scripts/build.ps1
 ```
 
-Wyniki: `dist/SmartPDF/SmartPDF.exe`, `dist/installer/SmartPDF-Setup-0.3.0-x64.exe`
-oraz `dist/installer/SmartPDF-Update-0.3.0-x64.exe`.
+Wyniki: `dist/SmartPDF/SmartPDF.exe`, `dist/installer/SmartPDF-Setup-0.4.0-x64.exe`
+oraz `dist/installer/SmartPDF-Update-0.4.0-x64.exe`.
 Testy sprawdzają round-trip projektów, atomowy zapis, eksport tekstu Unicode,
 geometrię stron i marginesów, zastępowanie tekstu, prawdziwy OCR, wektorowe kształty,
 cofanie/ponawianie, pisanie na stronie, suwaki, ciągłe przewijanie, zachowanie cienkich

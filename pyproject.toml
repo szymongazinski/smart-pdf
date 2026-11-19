@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "smart-pdf"
-version = "0.3.0"
+version = "0.4.0"
 description = "Local-first PDF editor for Windows with editable projects and offline OCR"
 requires-python = ">=3.12"
 license = "AGPL-3.0-or-later"

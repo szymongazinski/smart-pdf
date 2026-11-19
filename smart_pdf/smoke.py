@@ -54,7 +54,38 @@ def run_smoke(app,window,directory,preview_path=None):
                     window.canvas.remove_old_tiles()
                     window.grab().save(str(directory/f"preview-window-{zoom}.png"))
                     window.canvas.viewport().grab().save(str(directory/f"preview-page-{zoom}.png"))
-            (directory/"result.json").write_text(json.dumps({"ok":True,"pages":len(project.pages),"fonts":"Polish Unicode verified","rotation":90}),encoding="utf-8")
+            from smart_pdf.dialogs import CutPagesDialog
+            cut_dialog=CutPagesDialog(465,window)
+            cut_dialog.ranges.setText('11dowolny tekst-19 i 20-35')
+            cut_dialog.show()
+            QTest.qWait(80)
+            assert cut_dialog.indices()==list(range(10,35))
+            cut_dialog.grab().save(str(directory/'cut-pages-keep.png'))
+            cut_dialog.remove.setChecked(True)
+            assert len(cut_dialog.indices())==440
+            cut_dialog.grab().save(str(directory/'cut-pages-remove.png'))
+            cut_dialog.reject()
+            with pymupdf.open() as doc:
+                for i in range(6):
+                    doc.new_page().insert_text((40,60),f'Original page {i+1}')
+                doc.save(directory/'cut-source.pdf')
+            window.attach_project(Project.from_pdf(directory/'cut-source.pdf'))
+            project=window.project
+            window.apply_page_selection('2abc-4','keep')
+            assert [p.source for p in project.pages]==[1,2,3]
+            window.undo.undo()
+            assert len(project.pages)==6
+            window.apply_page_selection('2-4','remove')
+            assert [p.source for p in project.pages]==[0,4,5]
+            window.undo.undo()
+            window.undo.redo()
+            assert [p.source for p in project.pages]==[0,4,5]
+            project.save(directory/'cut.smartpdf')
+            export_pdf(project,directory/'cut.pdf')
+            with pymupdf.open(directory/'cut.pdf') as result:
+                assert len(result)==3
+                assert [p.get_text().strip() for p in result]==['Original page 1','Original page 5','Original page 6']
+            (directory/"result.json").write_text(json.dumps({"ok":True,"pages":len(project.pages),"fonts":"Polish Unicode verified","rotation":90,"page_ranges":"keep/remove, undo/redo, project and PDF export verified"}),encoding="utf-8")
             window.undo.setClean()
             window.recovered = False
             project.dirty = False
@@ -66,7 +97,7 @@ def run_smoke(app,window,directory,preview_path=None):
     QTimer.singleShot(300,check)
 
 
-def run_ocr_smoke(app,directory,engine="auto"):
+def run_ocr_smoke(app,directory,engine="auto",source_path=None):
     """Exercise the real context-menu dialog, subprocess and atomic replacement."""
     import hashlib,time
     from PySide6.QtCore import QSettings
@@ -89,9 +120,14 @@ def run_ocr_smoke(app,directory,engine="auto"):
     original = source.read_bytes()
     (directory/"original.pdf").write_bytes(original)
     project.doc.close()
+    if source_path:
+        # The optional real-document check always processes a private copy.
+        original=Path(source_path).read_bytes()
+        source.write_bytes(original)
+        (directory/'original.pdf').write_bytes(original)
     QSettings().setValue("ocr_engine",engine)
     QSettings().setValue("ocr_languages","pol+eng")
-    QSettings().setValue("ocr_dpi",300)
+    QSettings().setValue("ocr_dpi",400 if source_path else 300)
     dialog = OCRFileDialog(source)
     dialog.show()
     started = time.monotonic()
@@ -104,14 +140,25 @@ def run_ocr_smoke(app,directory,engine="auto"):
         try:
             assert dialog.ocr_result,dialog.detail.text()
             report = dialog.ocr_result
-            assert report["changed"] and report["pages_done"]==1 and report["pages_skipped"]==1
+            assert report["changed"]
+            if not source_path:
+                assert report["pages_done"]==1 and report["pages_skipped"]==1
             assert Path(report["backup"]).read_bytes()==original
             with pymupdf.open(stream=original,filetype="pdf") as before,pymupdf.open(source) as after:
-                assert "Zażółć" in after[0].get_text()
-                assert "quick" in after[0].get_text()
-                for a,b in zip(before,after):
+                assert len(before)==len(after)
+                if not source_path:
+                    assert "Zażółć" in after[0].get_text()
+                    assert "quick" in after[0].get_text()
+                check_indices=sorted({0,1,len(before)//2,len(before)-1}) if source_path else range(len(before))
+                for index in check_indices:
+                    a,b=before[index],after[index]
                     assert a.get_pixmap().samples==b.get_pixmap().samples
                     assert a.rotation==b.rotation
+                if source_path:
+                    assert after[0].get_text().strip()
+                    for a,b in zip(before,after):
+                        if len(a.get_text().strip())>=20:
+                            assert a.get_text()==b.get_text()
             dialog.grab().save(str(directory/"ocr-dialog.png"))
             (directory/"result.json").write_text(json.dumps({"ok":True,"report":report}),encoding="utf-8")
             dialog.reject()

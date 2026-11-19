@@ -39,7 +39,8 @@ def main():
     app.setWindowIcon(QIcon(str(resources() / "smart-pdf.ico")))
     if len(sys.argv)>2 and sys.argv[1]=="--self-test-ocr":
         from smart_pdf.smoke import run_ocr_smoke
-        window = run_ocr_smoke(app,sys.argv[2],sys.argv[3] if len(sys.argv)>3 else "auto")
+        window = run_ocr_smoke(app,sys.argv[2],sys.argv[3] if len(sys.argv)>3 else "auto",
+                               sys.argv[4] if len(sys.argv)>4 else None)
         return app.exec()
     if len(sys.argv)>2 and sys.argv[1]=="--ocr-in-place":
         from smart_pdf.ocr_dialog import OCRFileDialog

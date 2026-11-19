@@ -18,7 +18,8 @@ from PySide6.QtWidgets import (
 
 from smart_pdf import __version__
 from smart_pdf.canvas import Canvas
-from smart_pdf.dialogs import ScopeDialog
+from smart_pdf.dialogs import ScopeDialog,CutPagesDialog
+from smart_pdf.page_ranges import remaining_pages
 from smart_pdf.controls import DockTitle, PageDelegate, ValueSlider
 from smart_pdf.export import export_pdf
 from smart_pdf.model import Project, make_object, text_html, uid
@@ -144,6 +145,7 @@ class MainWindow(QMainWindow):
         self.prev_page_action = self.action("Poprzednia strona",lambda:self.navigate_page(-1),"Ctrl+PgUp")
         self.next_page_action = self.action("Następna strona",lambda:self.navigate_page(1),"Ctrl+PgDown")
         self.rotate_action = self.action("Obróć strony…",self.rotate_pages)
+        self.cut_pages_action = self.action("Wytnij strony…",self.cut_pages)
         self.margin_action = self.action("Margines",lambda:self.add_margin("right"))
         self.ocr_action = self.action("OCR automatyczny",self.toggle_ocr,checkable=True)
         self.ocr_action.setChecked(False)
@@ -308,6 +310,9 @@ class MainWindow(QMainWindow):
         self.page_label = QLabel("Ctrl + klik: wybierz wiele stron")
         self.page_label.setStyleSheet("font-size:9pt;color:#74839a;")
         layout.addWidget(self.page_label)
+        cut_button=QPushButton('Wytnij strony…')
+        cut_button.clicked.connect(self.cut_pages)
+        layout.addWidget(cut_button)
         self.pages_dock.setWidget(panel)
         self.addDockWidget(Qt.LeftDockWidgetArea,self.pages_dock)
 
@@ -418,6 +423,7 @@ class MainWindow(QMainWindow):
         for action in (self.undo_action,self.redo_action,self.copy_action,self.cut_action,self.paste_action,self.delete_action,self.duplicate_action):
             edit.addAction(action)
         pages = self.menuBar().addMenu("Strony")
+        pages.addAction(self.cut_pages_action)
         pages.addAction(self.rotate_action)
         pages.addAction(self.margin_action)
         pages.addAction("Dodaj lewy margines",lambda:self.add_margin("left"))
@@ -576,6 +582,7 @@ class MainWindow(QMainWindow):
         if not self.project or self.reading:
             return
         menu = QMenu(self)
+        menu.addAction(self.cut_pages_action)
         menu.addAction(self.rotate_action)
         menu.addAction(self.margin_action)
         menu.addAction("Usuń wybrane strony…",self.delete_pages)
@@ -803,6 +810,24 @@ class MainWindow(QMainWindow):
         local = self.local_margin_side(self.index)
         if self.project.pages[self.index].margins[local]:
             self.live_change(lambda:self.project.add_margin([self.index],local,value*72/25.4))
+
+    def cut_pages(self):
+        if not self.project or self.reading:
+            return
+        dialog=CutPagesDialog(len(self.project.pages),self)
+        if dialog.exec()==QDialog.Accepted:
+            self.apply_page_selection(dialog.ranges.text(),dialog.mode())
+
+    def apply_page_selection(self,text,mode):
+        if not self.project or self.reading:
+            return
+        indices=remaining_pages(text,len(self.project.pages),mode)
+        if len(indices)==len(self.project.pages):
+            return
+        self.cancel_ocr()
+        pages=[self.project.pages[i] for i in indices]
+        self.mutate('Wycięcie stron',lambda:setattr(self.project,'pages',pages))
+        self.statusBar().showMessage(f'Pozostawiono {len(pages)} stron. Ctrl+Z cofa wycięcie.',8000)
 
     def delete_pages(self):
         if not self.project or self.reading:
