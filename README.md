@@ -203,6 +203,11 @@ Opcjonalny trzeci argument ze ścieżką do lokalnego PDF dodaje zrzuty jego pod
 przy 125%, 175%, 210% i 300%, zapisane wyłącznie w podanym katalogu testowym.
 Test OCR z menu pliku w gotowym EXE: `SmartPDF.exe --self-test-ocr 'C:\Temp\SmartPDF-OCR-test'`.
 Sprawdza prawdziwy proces OCR i podmianę wyłącznie własnego, wygenerowanego dokumentu.
+Opcjonalne argumenty `gpu|cpu|auto` i ścieżka do PDF-a pozwalają sprawdzić ten sam
+przebieg na **kopii** lokalnego dokumentu, np. `SmartPDF.exe --self-test-ocr
+'C:\Temp\SmartPDF-OCR-test' gpu 'C:\Dokumenty\test.pdf'`. Plik wejściowy pozostaje
+niezmieniony. Test edytora sprawdza też oba tryby wycinania stron, Ctrl+Z/Y,
+zapis projektu i PDF oraz zapisuje statyczne podglądy okna zakresów.
 
 ## Licencja
 
