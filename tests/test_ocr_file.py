@@ -12,8 +12,45 @@ from PySide6.QtTest import QTest
 from smart_pdf.export import overlay_pdf
 from smart_pdf.model import Project,make_object,text_html
 from smart_pdf.ocr import page_layer,resources
-from smart_pdf.ocr_file import commit_ocr,file_hash,prepare_ocr
+from smart_pdf.ocr_file import commit_ocr,file_hash,prepare_ocr,write_report
 from smart_pdf.ocr_dialog import OCRFileDialog
+
+
+@pytest.mark.skipif(os.name!='nt',reason='Windows file handles deny delete sharing')
+def test_progress_publication_survives_a_real_windows_reader(tmp_path):
+    import threading
+    path=tmp_path/'report.json'
+    path.write_text('{"state":"working"}',encoding='utf-8')
+    reader=path.open('r',encoding='utf-8')
+    release=threading.Timer(.12,reader.close)
+    release.start()
+    try:
+        write_report(path,{'state':'prepared','pages_skipped':465})
+        assert json.loads(path.read_text(encoding='utf-8'))=={'state':'prepared','pages_skipped':465}
+        assert not path.with_suffix('.partial').exists()
+    finally:
+        release.join()
+        reader.close()
+
+
+def test_dialog_completes_a_long_searchable_document(app,tmp_path):
+    source=tmp_path/'long-book.pdf'
+    with pymupdf.open() as doc:
+        for _ in range(600):
+            doc.new_page().insert_text((40,60),'Existing searchable text must remain unchanged')
+        doc.save(source)
+    original=source.read_bytes()
+    dialog=OCRFileDialog(source)
+    dialog.show()
+    deadline=time.monotonic()+30
+    while not dialog.ocr_result and not dialog.label.text().startswith('Nie udało') and time.monotonic()<deadline:
+        QTest.qWait(10)
+    assert dialog.ocr_result,dialog.detail.text()
+    assert dialog.ocr_result['pages_skipped']==600
+    assert source.read_bytes()==original
+    dialog.reject()
+    dialog.deleteLater()
+    app.processEvents()
 
 
 def create_scan(path,rotation=0,crop=False,encrypted=False):

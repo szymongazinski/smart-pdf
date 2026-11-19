@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import shutil
+import time
 import uuid
 from pathlib import Path
 
@@ -23,7 +24,20 @@ def write_report(path,value):
     path = Path(path)
     temporary = path.with_suffix(".partial")
     temporary.write_text(json.dumps(value,ensure_ascii=False),encoding="utf-8")
-    os.replace(temporary,path)
+    # A Windows reader briefly denies rename/delete sharing. The dialog polls
+    # this report while native pages can produce hundreds of updates per second.
+    deadline = time.monotonic()+2
+    try:
+        while True:
+            try:
+                os.replace(temporary,path)
+                return
+            except PermissionError:
+                if time.monotonic()>=deadline:
+                    raise
+                time.sleep(.02)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def prepare_ocr(source,output,languages="pol+eng",dpi=300,engine="auto",password="",progress=lambda v:None):
